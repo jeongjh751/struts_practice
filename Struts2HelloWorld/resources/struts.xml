@@ -12,11 +12,26 @@
 <!--</struts>-->
 
 <struts>
-    <constant name="struts.devMode" value="true" />
-    <constant name="struts.convention.result.path" value="/" />
-    
-    <package name="default" extends="struts-default">
-        <action name="board" class="action.BoardAction">
+    <!-- 開発モード：エラー詳細表示、自動リロード有効 -->
+    <constant name="struts.devMode" value="true" />    
+	<package name="default" extends="struts-default">
+        <!-- デフォルトアクション -->
+        <action name="board" class="action.BoardAction" method="execute">
+            <result>/board.jsp</result>
+        </action>
+        
+        <!-- 更新アクション -->
+        <action name="boardUpdate" class="action.BoardAction" method="update">
+            <result>/board.jsp</result>
+        </action>
+        
+        <!-- 編集アクション -->
+        <action name="boardEdit" class="action.BoardAction" method="edit">
+            <result>/board.jsp</result>
+        </action>
+        
+        <!-- 削除アクション -->
+        <action name="boardDelete" class="action.BoardAction" method="delete">
             <result>/board.jsp</result>
         </action>
     </package>

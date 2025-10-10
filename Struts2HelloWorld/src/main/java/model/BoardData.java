@@ -24,8 +24,12 @@ public class BoardData {
     // ========== フィールド宣言 ==========
     // すべてprivateで宣言し、外部から直接アクセスできないようにする
     // これをカプセル化（encapsulation）と呼ぶ
+	
+	private int id;  // 各投稿を識別するID
+	// 編集・削除機能ではどの投稿を操作するか特定する必要がある
+	// Listのインデックスではなく、固有のIDで管理する方が安全
     
-    private String postDate;
+	private String postDate;
     // 投稿日時を保存するフィールド
     // 形式: "yyyy/MM/dd HH:mm:ss" （例: "2025/10/09 16:46:48"）
     
@@ -44,6 +48,14 @@ public class BoardData {
     // 命名規則: get + フィールド名（先頭大文字）
     // JSPの<s:property value="postDate"/>で呼ばれる
     
+    /**
+     * 投稿番号を取得
+     * @return 投稿番号（Int形式）
+     */
+	public int getId() {
+		return id;
+	}
+
     /**
      * 投稿日時を取得
      * @return 投稿日時（String形式）
@@ -81,7 +93,17 @@ public class BoardData {
     // フィールドに値を設定するためのメソッド
     // 命名規則: set + フィールド名（先頭大文字）
     // Struts2が自動的にフォームの値を設定する際に呼ばれる
-    
+
+
+    /**
+     * 投稿番号を設定
+     * @param postId 設定する投稿番号
+     *
+     */
+	public void setId(int id) {
+		this.id = id;
+	}
+	
     /**
      * 投稿日時を設定
      * @param postDate 設定する投稿日時

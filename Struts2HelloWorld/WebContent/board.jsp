@@ -25,6 +25,50 @@
 <head>
 <meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
 <title>シンプル掲示板</title>
+<script>
+<%-- 
+ * 編集フォームを表示する
+ * @param id 編集対象の投稿ID
+ * 
+ * 【動作】
+ * 1. 全ての編集フォームを非表示にする（他の編集フォームが開いていたら閉じる）
+ * 2. 指定されたIDの編集フォームのみ表示する
+--%>
+function showEditForm(id) {
+    // 全ての編集フォームを非表示
+    var allForms = document.querySelectorAll('[id^="edit-form-"]');
+    for(var i = 0; i < allForms.length; i++) {
+        allForms[i].style.display = 'none';
+    }
+    // 指定されたフォームのみ表示
+    document.getElementById('edit-form-' + id).style.display = 'table-row';
+}
+<%-- 
+ * 編集フォームを非表示にする
+ * @param id 非表示にする投稿ID
+ * 
+ * 【動作】
+ * キャンセルボタンが押されたときに呼ばれる
+--%>
+function hideEditForm(id) {
+    document.getElementById('edit-form-' + id).style.display = 'none';
+}
+<%-- 
+ * 削除確認ダイアログを表示してフォーム送信
+ * @param id 削除対象の投稿ID
+ * 
+ * 【動作】
+ * 1. 確認ダイアログを表示
+ * 2. OKが押されたら、削除フォームを送信
+ * 3. キャンセルが押されたら何もしない
+--%>
+function confirmDelete(id) {
+    if (confirm('本当に削除しますか？')) {
+        document.getElementById('delete-form-' + id).submit();
+    }
+    return false;
+}
+</script>
 </head>
 <body>
 <h1>シンプル掲示板</h1>
@@ -110,7 +154,11 @@
   3. BoardActionクラスのexecute()メソッドが実行される
 --%>
 
-<s:submit value="更新" method="update"/>
+<%-- 
+【変更】更新ボタンにaction属性を追加
+action="boardUpdate"でboardUpdate.actionが呼ばれる
+--%>
+<s:submit value="更新" method="boardUpdate"/>
 <%--
 【<s:submit>タグ - 更新ボタン】
 - method="update": 特定のメソッドを指定
@@ -208,6 +256,32 @@ if(stack!=null && stack.findValue("data")==null){
 <td><s:property value="remoteAddress"/></td>
 <%-- 投稿者のIPアドレスを表示。BoardData.getRemoteAddress()の値 --%>
 
+<%-- 削除フォーム --%>
+<td>
+    <button onclick="showEditForm(<s:property value='id'/>)">編集</button>
+    <button onclick="confirmDelete(<s:property value='id'/>)">削除</button>
+    
+    <%-- 削除フォーム --%>
+    <form id="delete-form-<s:property value='id'/>" 
+          action="boardDelete.action" 
+          method="post" 
+          style="display:none;">
+        <input type="hidden" name="id" value="<s:property value='id'/>"/>
+    </form>
+</td>
+</tr>
+
+<%-- 編集フォーム行 (初期は非表示) --%>
+<tr id="edit-form-<s:property value='id'/>" style="display:none;">
+<td colspan="6">
+    <form action="boardEdit.action" method="post">
+        <input type="hidden" name="id" value="<s:property value='id'/>"/>
+        名前: <input type="text" name="name" value="<s:property value='name'/>" size="10"/>
+        メッセージ: <input type="text" name="message" value="<s:property value='message'/>" size="60"/>
+        <input type="submit" value="更新"/>
+        <button type="button" onclick="hideEditForm(<s:property value='id'/>)">キャンセル</button>
+    </form>
+</td>
 </tr>
 </s:iterator>
 <%-- iteratorタグの終了。全てのBoardDataオブジェクトを処理するまでループ --%>
