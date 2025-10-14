@@ -29,6 +29,9 @@ public class BoardData {
 	// 編集・削除機能ではどの投稿を操作するか特定する必要がある
 	// Listのインデックスではなく、固有のIDで管理する方が安全
     
+	private String title; 
+	// 各投稿のタイトル
+	
 	private String postDate;
     // 投稿日時を保存するフィールド
     // 形式: "yyyy/MM/dd HH:mm:ss" （例: "2025/10/09 16:46:48"）
@@ -38,6 +41,9 @@ public class BoardData {
     
     private String message;
     // 投稿メッセージの本文を保存するフィールド
+    
+    private int viewCount;
+    // 投稿の閲覧数
     
     private String remoteAddress;
     // 投稿者のIPアドレスを保存するフィールド
@@ -56,6 +62,14 @@ public class BoardData {
 		return id;
 	}
 
+    /**
+     * タイトルを取得
+     * @return タイトル（String形式）
+     */
+    public String getTitle() {
+        return title;
+    }
+    
     /**
      * 投稿日時を取得
      * @return 投稿日時（String形式）
@@ -82,6 +96,14 @@ public class BoardData {
     }
 
     /**
+     * 投稿の閲覧数
+     * @return 閲覧数
+     */
+    public int getViewCount() {
+        return viewCount;
+    }
+    
+    /**
      * 投稿者のIPアドレスを取得
      * @return IPアドレス
      */
@@ -103,6 +125,15 @@ public class BoardData {
 	public void setId(int id) {
 		this.id = id;
 	}
+	
+
+	 /**
+    * タイトルを取得
+    * @return タイトル（String形式）
+    */
+    public void setTitle(String title) {
+        this.title = title;
+    }
 	
     /**
      * 投稿日時を設定
@@ -144,6 +175,15 @@ public class BoardData {
         this.message = message;
     }
 
+    /**
+     * 閲覧数を設定
+     * @param viewCount 設定する投稿の閲覧数
+     * 
+     */
+    public void setViewCount(int viewCount) {
+        this.viewCount = viewCount;
+    }
+    
     /**
      * 投稿者のIPアドレスを設定
      * @param remoteAddress 設定するIPアドレス

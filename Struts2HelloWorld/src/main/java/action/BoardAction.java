@@ -59,6 +59,11 @@ public class BoardAction extends ActionSupport {
      * 3. Struts2が自動的にsetId()を呼び出して値を設定する
      */
 	
+	private String title;
+	/*
+	 * 【投稿タイトルを保持するフィールド】
+	 */
+	
 	private String name;
 	/*
 	 * 【投稿者名を保持するフィールド】
@@ -95,6 +100,8 @@ public class BoardAction extends ActionSupport {
 	 * Board.getChatData() → このdataフィールド → JSPのValueStack → 画面表示
 	 */
 
+	private BoardData item; // 詳細表示用
+
 	private static final long serialVersionUID = 1L;
 	/*
 	 * 【シリアライズバージョンUID】
@@ -123,6 +130,17 @@ public class BoardAction extends ActionSupport {
 	public void setId(int id) {
 		this.id = id;
 	}
+	
+	
+    public String getTitle() {
+        return title;
+    }
+    
+    public void setTitle(String title) {
+        this.title = title;
+    }
+    
+
 	/**
 	 * 投稿者名を取得
 	 * @return 投稿者名
@@ -195,9 +213,39 @@ public class BoardAction extends ActionSupport {
 	public void setData(List<BoardData> data) {
 		this.data = data;
 	}
-
+	
+    public BoardData getItem() {
+        return item;
+    }
+    
+    public void setItem(BoardData item) {
+        this.item = item;
+    }
 	// ========== Actionメソッド ==========
 
+    // 一覧表示 (リスト画面)
+    public String list() {
+        data = Board.getChatData();
+        return "list";
+    }
+    
+    // 詳細表示
+    public String detail() {
+        item = Board.getDataById(id);
+        if (item != null) {
+            Board.incrementViewCount(id);  // 閲覧数+1
+            return "detail";
+        } else {
+            addActionError("投稿が見つかりませんでした");
+            return "error";
+        }
+    }
+    
+    // 新規投稿フォーム表示
+    public String input() {
+        return "input";
+    }
+    
 	/**
 	 * 【executeメソッド - デフォルトのアクションメソッド】
 	 * 
@@ -218,69 +266,20 @@ public class BoardAction extends ActionSupport {
 	 * 
 	 * @return 処理結果を表す文字列（"success"）
 	 */
-	public String execute() {
-		/*
-		 * 【Struts2のアクションメソッドの戻り値】
-		 * - 戻り値は文字列で、どのビュー（JSP）を表示するか決める
-		 * - struts.xmlで定義された結果と対応:
-		 *   <result>タグで"success"という名前とJSPを関連付ける
-		 * 
-		 * 【戻り値一覧】
-		 * - "success": 処理成功（デフォルト）
-		 * - "error": エラー発生
-		 * - "input": 入力エラー（フォームに戻る）
-		 * - "none": ビューを表示しない
-		 * - カスタム値: "list", "detail"など自由に定義可能
-		 */
-
-		if (isValid()) {
-			// 【入力値が正しい場合】
-			// バリデーションを通過（名前とメッセージが両方入力されている）
-
-			data = Board.addChatData(name, message, remoteAddress);
-			/*
-			 * Board.addChatData()の動作:
-			 * 1. 新しいBoardDataオブジェクトを作成
-			 * 2. name, message, remoteAddressを設定
-			 * 3. 現在日時を自動設定
-			 * 4. Listの先頭に追加
-			 * 5. 更新後のList全体を返す
-			 * 
-			 * 戻り値をdataフィールドに格納:
-			 * - このdataはJSPのValueStackに自動で追加される
-			 * - JSPで <s:iterator value="data"> として参照可能
-			 */
-
-		} else {
-			// 【入力値にエラーがある場合】
-			// バリデーション失敗（名前またはメッセージが未入力）
-
-			data = Board.getChatData();
-			/*
-			 * エラー時の動作:
-			 * - 新しい投稿は追加しない
-			 * - 現在の掲示板データのみを取得して表示
-			 * - エラーメッセージはisValid()内のaddActionError()で
-			 *   設定されているので、JSPの<s:actionerror/>に表示される
-			 */
-		}
-
-		return "success";
-		/*
-		 * 【"success"を返す理由】
-		 * - struts.xmlで以下のように定義されている:
-		 *   <action name="board" class="action.BoardAction">
-		 *       <result>/board.jsp</result>
-		 *   </action>
-		 * - <result>タグにname属性がない場合、デフォルトで"success"
-		 * - つまり、"success"が返されるとboard.jspが表示される
-		 * 
-		 * 【エラー時もsuccessを返す理由】
-		 * - エラーメッセージを表示しつつ、同じ画面に留まりたいため
-		 * - もし"error"や"input"を返す場合は、別のJSPを定義する必要がある
-		 */
-	}
-
+    public String execute() {
+        if (isValid()) {
+            boolean success = Board.addChatData(title, name, message, remoteAddress);
+            if (success) {
+                return "success";
+            } else {
+                addActionError("投稿に失敗しました");
+                return "input";
+            }
+        } else {
+            return "input";
+        }
+    }
+	
 	/**
 	 * 【updateメソッド - 更新専用のアクションメソッド】
 	 * 
@@ -300,56 +299,23 @@ public class BoardAction extends ActionSupport {
 	 * 
 	 * @return 処理結果を表す文字列（"success"）
 	 */
-	public String update() {
-		/*
-		 * 【Dynamic Method Invocation（動的メソッド呼び出し）】
-		 * Struts2の機能で、method属性を使って呼び出すメソッドを指定できる
-		 * 
-		 * 設定方法:
-		 * <s:submit value="更新" method="update"/>
-		 *           ↑ボタンのラベル  ↑呼び出すメソッド名
-		 * 
-		 * 仕組み:
-		 * 1. Struts2がリクエストパラメータから"method:update"を検出
-		 * 2. execute()ではなくupdate()メソッドを呼び出す
-		 * 3. 複数の機能を1つのActionクラスにまとめられる
-		 * 
-		 * メリット:
-		 * - 投稿用と更新用で別々のActionクラスを作らなくて済む
-		 * - 関連する機能を1つのクラスにまとめられる
-		 */
-
-		data = Board.getChatData();
-		/*
-		 * 現在の掲示板データをそのまま取得
-		 * - 新規投稿は行わない
-		 * - バリデーションも不要（入力フィールドを使わない）
-		 * - 単純に最新のデータを取得して画面に表示するだけ
-		 */
-
-		return "success";
-		// board.jspに遷移して最新データを表示
-	}
-
-	/**
-	 * 【isValidメソッド - カスタムバリデーションメソッド】
-	 * 
-	 * 役割:
-	 * - ユーザー入力の妥当性をチェック
-	 * - 必須項目（名前、メッセージ）が入力されているか確認
-	 * 
-	 * なぜvalidate()メソッドを使わないのか:
-	 * - ActionSupportのvalidate()メソッドは全てのアクションメソッド
-	 *   （execute、update等）に対して自動実行される
-	 * - update()メソッドではバリデーション不要なので、
-	 *   validate()を使うと問題が発生する
-	 * - そのため、独自のisValid()メソッドを作成し、
-	 *   execute()内で必要な時だけ呼び出す
-	 * 
-	 * @return true=入力OK、false=入力エラー
-	 */
-
 	
+	  
+    public String editForm() {
+        item = Board.getDataById(id);
+        if (item != null) {
+            // 既存データをフィールドに設定
+            this.title = item.getTitle();
+            this.name = item.getName();
+            this.message = item.getMessage();
+            return "edit";
+        } else {
+            addActionError("投稿が見つかりませんでした");
+            data = Board.getChatData();
+            return "list";
+        }
+    }
+    
     /**
      * 編集アクション：投稿を更新する
      * - 既存の投稿内容を変更できるようにする
@@ -358,16 +324,16 @@ public class BoardAction extends ActionSupport {
      * @return "success"を返してboard.jspを表示
      */
 	public String edit() {
-		if (name != null && message != null && !name.equals("") && !message.equals("")) {
-			boolean success = Board.updateData(id, name, message);
+		if (title != null && name != null && message != null &&
+				!title.equals("") && !name.equals("") && !message.equals("")) {
+			boolean success = Board.updateData(id, title, name, message);
 			if (!success) {
 				addActionError("投稿が見つかりませんでした");
 			}
 		} else {
-			addActionError("名前とメッセージは必須です");
+			addActionError("すべて入力してください");
 		}
-		data = Board.getChatData();
-		return "success";
+		return "list";
 	}
 
     /**
@@ -378,12 +344,11 @@ public class BoardAction extends ActionSupport {
      * @return "success"を返してboard.jspを表示
      */
 	public String delete() {
-	    boolean success = Board.deleteData(id);
-	    if (!success) {
-	        addActionError("投稿が見つかりませんでした");
-	    }
-	    data = Board.getChatData();
-	    return "success";
+		boolean success = Board.deleteData(id);
+		if (!success) {
+			addActionError("投稿が見つかりませんでした");
+		}
+		return "list";
 	}
 
 	public boolean isValid() {
@@ -407,6 +372,10 @@ public class BoardAction extends ActionSupport {
 		 * @RequiredStringValidator(message="必須です")
 		 */
 
+		if (title == null || title.equals("")) {
+            addActionError("タイトルを入力してください");
+        }
+		
 		if (name == null || name.equals("")) {
 			/*
 			 * 【名前の必須チェック】
@@ -462,38 +431,4 @@ public class BoardAction extends ActionSupport {
 		 * 4. execute()メソッドでif(isValid())として判定
 		 */
 	}
-
-	// ========== 補足情報 ==========
-
-	/*
-	 * 【このクラスのライフサイクル】
-	 * 
-	 * 1. リクエスト受信
-	 *    ユーザーがフォームを送信
-	 *    ↓
-	 * 2. インスタンス生成
-	 *    Struts2がBoardActionの新しいインスタンスを作成
-	 *    毎回新しいインスタンスが作られる（リクエストスコープ）
-	 *    ↓
-	 * 3. パラメータバインディング
-	 *    setName(), setMessage(), setRemoteAddress()が自動で呼ばれる
-	 *    ↓
-	 * 4. アクションメソッド実行
-	 *    - method属性がない → execute()が呼ばれる
-	 *    - method="update" → update()が呼ばれる
-	 *    ↓
-	 * 5. 結果の決定
-	 *    戻り値（"success"）に基づいて表示するJSPを決定
-	 *    ↓
-	 * 6. ビューレンダリング
-	 *    board.jspでデータを表示
-	 *    getData()が呼ばれてJSPにデータが渡される
-	 *    ↓
-	 * 7. レスポンス送信
-	 *    HTMLがクライアントに送信される
-	 *    ↓
-	 * 8. インスタンス破棄
-	 *    リクエスト処理完了後、インスタンスはガベージコレクション対象
-	 */
-
 }

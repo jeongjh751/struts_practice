@@ -1,281 +1,497 @@
 package model;
 
-import java.text.SimpleDateFormat;
-// 日付を指定した形式の文字列に変換するクラス
-import java.util.Date;
-// 現在の日時を取得するクラス
+import java.sql.Connection;
+import java.sql.PreparedStatement;
+import java.sql.ResultSet;
+import java.sql.SQLException;
+import java.sql.Statement;
+import java.sql.Timestamp;
+import java.util.ArrayList;
 import java.util.List;
-// リスト（配列のような動的な集合）のインターフェース
-import java.util.Vector;
-// スレッドセーフなListの実装クラス
-// 複数のユーザーが同時にアクセスしても安全にデータを管理できる
 
 /**
  * 【Boardクラス】
- * 掲示板のデータを管理するモデルクラス
+ * PostgreSQLデータベースを使用した掲示板データ管理クラス
  * 
  * 役割:
- * - 掲示板の投稿データをメモリ上に保存
- * - 投稿の追加機能
- * - 投稿一覧の取得機能
+ * - データベースへの接続とSQL実行
+ * - CRUD操作（作成、読取、更新、削除）の実装
+ * - 掲示板データの永続化
  * 
- * 特徴:
- * - すべてのフィールドとメソッドがstaticで宣言されている
- * - つまり、アプリケーション全体で1つのデータを共有する（シングルトンパターン）
- * - 複数のユーザーが同じ掲示板データにアクセスできる
- * 
- * 注意点:
- * - データはメモリ上にのみ存在する（揮発性）
- * - サーバーを再起動すると全データが消える
- * - 実際の業務アプリではデータベースを使用すべき
+ * 変更点:
+ * - 以前: static Vector<BoardData> でメモリに保存
+ * - 現在: PostgreSQL データベースに保存
+ * - メリット: サーバー再起動してもデータが消えない
  */
 public class Board {
-
-	// ========== staticフィールド ==========
-	// staticを付けることで、クラスレベルの変数になる
-	// つまり、Boardクラスのインスタンスを何個作っても、
-	// このboardリストは1つだけ存在し、全てのインスタンスで共有される
-
-	private static List<BoardData> board = new Vector<BoardData>();
-	/*
-	 * 【掲示板データを格納するリスト】
-	 * 
-	 * - List<BoardData>: BoardDataオブジェクトを格納するリスト型
-	 * - static: アプリケーション全体で1つだけ存在する共有変数
-	 * - private: このクラス内からのみアクセス可能（カプセル化）
-	 * - new Vector<BoardData>(): Vectorクラスでリストを初期化
-	 * 
-	 * 【Vectorを使う理由】
-	 * - Vector: スレッドセーフなList実装
-	 * - 複数のユーザーが同時に掲示板にアクセスしても、
-	 *   データの整合性が保たれる
-	 * - 同期化されたメソッドを持つため、マルチスレッド環境で安全
-	 * 
-	 * 【ArrayListとの違い】
-	 * - ArrayList: 高速だがスレッドセーフではない（単一スレッド向け）
-	 * - Vector: 少し遅いがスレッドセーフ（マルチスレッド向け）
-	 * 
-	 * 【メモリイメージ】
-	 * board = [BoardData1, BoardData2, BoardData3, ...]
-	 *          ↑最新    ↑2番目     ↑3番目
-	 * add(0, data)で常に先頭に追加されるため、最新の投稿が最初に来る
-	 */
-
-	private static SimpleDateFormat sdformat = new SimpleDateFormat("yyyy/MM/dd HH:mm:ss");
-	/*
-	 * 【日付フォーマッター】
-	 * 
-	 * - SimpleDateFormat: 日付を文字列に変換するクラス
-	 * - "yyyy/MM/dd HH:mm:ss": 日付の表示形式を指定
-	 * - static: 全ての投稿で同じフォーマッターを共有
-	 *   毎回新しいSimpleDateFormatオブジェクトを作るのは無駄なので、
-	 *   1つだけ作って使い回す
-	 * 
-	 * 【使用例】
-	 * Date now = new Date();  // 現在日時を取得
-	 * String dateStr = sdformat.format(now);  // "2025/10/09 16:46:48"
-	 */
-	
-	private static int nextId = 1; // ID自動採番用
-	/*
-	 * 各投稿に一意のIDを自動で割り当てるためのカウンター
-	 * staticなので、アプリケーション全体で1つのカウンターを共有
-	 */
-	
-	// ========== publicメソッド ==========
-
-	/**
-     * 掲示板に新しい投稿を追加するメソッド
-     * 
-     * @param name 投稿者の名前
-     * @param message 投稿メッセージ
-     * @param remoteAddress 投稿者のIPアドレス
-     * @return 更新後の掲示板データ全体（List<BoardData>）
-     * 
-     * 【処理の流れ】
-     * 1. 新しいBoardDataオブジェクトを作成
-     * 2. 引数で受け取ったデータをsetterで設定
-     * 3. 現在日時を自動で設定
-     * 4. リストの先頭（インデックス0）に追加
-     * 5. 更新後のリスト全体を返す
-     */
-    public static List<BoardData> addChatData(String name, String message, String remoteAddress) {
-        /*
-         * 【staticメソッド】
-         * - インスタンスを作らずに呼び出せる: Board.addChatData(...)
-         * - staticフィールド（board、sdformat）にアクセスできる
-         * - thisキーワードは使えない（インスタンスが存在しないため）
-         */
-        
-        // 1. 新しい投稿データオブジェクトを作成
-        BoardData data = new BoardData();
-        /*
-         * new BoardData()でメモリ上に新しいオブジェクトを作成
-         * この時点では全フィールドがnull
-         */
-        data.setId(nextId++); // IDを自動設定
-        
-        // 2. ユーザーが入力したデータを設定
-        data.setName(name);
-        // 投稿者名をセット。BoardData.setName()が呼ばれる
-        
-        data.setMessage(message);
-        // メッセージ本文をセット。BoardData.setMessage()が呼ばれる
-        
-        data.setRemoteAddress(remoteAddress);
-        // IPアドレスをセット。BoardData.setRemoteAddress()が呼ばれる
-        
-        // 3. 現在日時を自動で設定
-        data.setPostDate(sdformat.format(new Date()));
-        /*
-         * 【詳細な動作】
-         * new Date(): 現在の日時を取得
-         *   例: Wed Oct 09 16:46:48 JST 2025
-         * 
-         * sdformat.format(...): Date型を文字列に変換
-         *   "yyyy/MM/dd HH:mm:ss"の形式に従って変換
-         *   例: "2025/10/09 16:46:48"
-         * 
-         * data.setPostDate(...): 変換した文字列をBoardDataに保存
-         */
-        
-        // 4. 作成した投稿データをリストの先頭に追加
-        board.add(0, data);
-        /*
-         * 【List.add(index, element)メソッド】
-         * - index: 挿入位置（0は先頭）
-         * - element: 追加する要素
-         * 
-         * 【インデックス0に追加する理由】
-         * - 最新の投稿を一番上に表示したいため
-         * - add(0, data)で常に先頭に挿入される
-         * - 既存のデータは後ろにずれる
-         * 
-         * 【動作イメージ】
-         * 追加前: [古い投稿1, 古い投稿2, 古い投稿3]
-         * add(0, 新しい投稿)
-         * 追加後: [新しい投稿, 古い投稿1, 古い投稿2, 古い投稿3]
-         * 
-         * 【別の方法との比較】
-         * board.add(data): リストの最後に追加（新しい投稿が下に表示される）
-         * board.add(0, data): リストの先頭に追加（新しい投稿が上に表示される）← 採用
-         */
-        
-        // 5. 更新後の掲示板データ全体を返す
-        return board;
-        /*
-         * このリストはBoardActionクラスのdataフィールドに設定され、
-         * JSPで表示される
-         * 
-         * 【呼び出し元での使用】
-         * BoardAction.execute()内:
-         * data = Board.addChatData(name, message, remoteAddress);
-         * → dataフィールドに最新の掲示板データが設定される
-         */
-    }
-
-	/**
-	 * 現在の掲示板データ全体を取得するメソッド
-	 * 
-	 * @return 掲示板データのリスト（List<BoardData>）
-	 * 
-	 * 【使用箇所】
-	 * 1. BoardAction.update()メソッド内
-	 *    - 「更新」ボタンが押された時に最新データを取得
-	 * 2. board.jsp内のスクリプトレット
-	 *    - 初期表示時にデータを取得
-	 */
-	public static List<BoardData> getChatData() {
-		return board;
-		/*
-		 * 単純にstaticフィールドboardをそのまま返す
-		 * 
-		 * 【注意点】
-		 * - このメソッドは参照を返すため、呼び出し元で
-		 *   リストを変更すると元のboardも変更される
-		 * - より安全な実装なら、コピーを返すべき:
-		 *   return new ArrayList<>(board);
-		 * 
-		 * 【なぜgetterが必要か？】
-		 * - boardフィールドはprivateなので外部から直接アクセスできない
-		 * - このメソッドを通してのみアクセス可能にすることで、
-		 *   将来的にアクセス制御やログ出力などを追加しやすい
-		 */
-	}
-
-	/*
-	 * @param id 取得したい投稿のID 
-	 * @return 見つかった投稿データ、見つからない場合はnull
-	 * IDをキーにして投稿を探すヘルパーメソッド
-	 */
-	public static BoardData getDataById(int id) {
-		for (BoardData data : board) {
-			if (data.getId() == id) {
-				return data;
-			}
-		}
-		return null;
-	}
-
+    
     /**
-     * 投稿を編集（更新）する
-     * @param id 編集対象の投稿ID
-     * @param name 新しい名前
+     * 【addChatData メソッド】
+     * 掲示板に新しい投稿を追加する
+     * 
+     * @param title タイトル
+     * @param name 投稿者名
+     * @param message メッセージ本文
+     * @param remoteAddress 投稿者のIPアドレス
+     * @return 成功時true、失敗時false
+     * 
+     * 処理の流れ:
+     * 1. SQL INSERT文を準備
+     * 2. データベースに接続
+     * 3. パラメータを設定
+     * 4. SQL実行
+     * 5. 結果を確認
+     * 6. リソースをクローズ
+     */
+    public static boolean addChatData(String title, String name, String message, String remoteAddress) {
+        // INSERT文の準備
+        // public.board_data: publicスキーマのboard_dataテーブル
+        // ?: プレースホルダー（後で値を設定）
+        String sql = "INSERT INTO public.board_data (title, name, message, remote_address, post_date, view_count) " +
+                     "VALUES (?, ?, ?, ?, CURRENT_TIMESTAMP, 0)";
+        /*
+         * CURRENT_TIMESTAMP: 現在日時を自動設定
+         * view_count: 初期値0
+         * id: SERIAL型なので自動採番される
+         */
+        
+        // リソース変数の宣言
+        Connection conn = null;           // データベース接続
+        PreparedStatement pstmt = null;   // SQL実行オブジェクト
+        
+        try {
+            // 1. データベースに接続
+            conn = DBConnection.getConnection();
+            /*
+             * DBConnection.getConnection()の動作:
+             * - PostgreSQLドライバをロード
+             * - jdbc:postgresql://localhost:5432/struts_board に接続
+             * - 接続に成功するとConnectionオブジェクトを返す
+             */
+            
+            // 2. SQL文を準備
+            pstmt = conn.prepareStatement(sql);
+            /*
+             * PreparedStatement:
+             * - SQLインジェクション対策
+             * - ?の部分にパラメータを安全に設定できる
+             * - 同じSQL文を複数回実行する場合に高速
+             */
+            
+            // 3. パラメータを設定（?の部分に値を入れる）
+            pstmt.setString(1, title);         // 1番目 → title
+            pstmt.setString(2, name);          // 2番目 → name
+            pstmt.setString(3, message);       // 3番目 → message
+            pstmt.setString(4, remoteAddress); // 4番目 → remoteAddress
+            /*
+             * setString(index, value):
+             * - index: ?の位置（1から始まる）
+             * - value: 設定する値
+             * - 自動的にエスケープ処理される（安全）
+             */
+            
+            // 4. SQL実行
+            int result = pstmt.executeUpdate();
+            /*
+             * executeUpdate():
+             * - INSERT, UPDATE, DELETEの実行用
+             * - 戻り値: 影響を受けた行数
+             * - INSERT成功時は通常1が返る
+             */
+            
+            // 5. 結果を確認して返す
+            return result > 0;  // 1行以上挿入されたら成功
+            
+        } catch (SQLException e) {
+            // SQLエラーが発生した場合
+            System.out.println("addChatData SQLException エラー:");
+            e.printStackTrace();  // エラー内容をコンソールに出力
+            return false;         // 失敗を返す
+            
+        } finally {
+            // 必ず実行される部分（成功・失敗に関わらず）
+            closeResources(conn, pstmt, null);
+            /*
+             * リソースのクローズ:
+             * - データベース接続は限られたリソース
+             * - 使い終わったら必ずクローズする必要がある
+             * - finallyブロックで確実にクローズ
+             */
+        }
+    }
+    
+    /**
+     * 【getChatData メソッド】
+     * 掲示板データ全体を取得（新しい順）
+     * 
+     * @return 投稿データのリスト（List<BoardData>）
+     * 
+     * 処理の流れ:
+     * 1. SQL SELECT文を準備
+     * 2. データベースに接続
+     * 3. SQL実行
+     * 4. 結果セットからデータを取得
+     * 5. BoardDataオブジェクトに変換してリストに追加
+     * 6. リソースをクローズ
+     * 7. リストを返す
+     */
+    public static List<BoardData> getChatData() {
+        // SELECT文の準備
+        // ORDER BY post_date DESC: 投稿日時の降順（新しい順）
+        String sql = "SELECT * FROM public.board_data ORDER BY post_date DESC";
+        
+        // リソース変数の宣言
+        Connection conn = null;      // データベース接続
+        Statement stmt = null;       // SQL実行オブジェクト
+        ResultSet rs = null;         // 検索結果
+        List<BoardData> dataList = new ArrayList<>();  // 結果を格納するリスト
+        /*
+         * ArrayList<BoardData>:
+         * - BoardDataオブジェクトを格納する可変長配列
+         * - 初期状態は空
+         * - データを取得するたびにadd()で追加
+         */
+        
+        try {
+            // 1. データベースに接続
+            conn = DBConnection.getConnection();
+            
+            // 2. Statementオブジェクト作成
+            stmt = conn.createStatement();
+            /*
+             * Statement vs PreparedStatement:
+             * - Statement: パラメータなしのSQL用
+             * - PreparedStatement: パラメータありのSQL用
+             * 今回は?がないのでStatementを使用
+             */
+            
+            // 3. SQL実行
+            rs = stmt.executeQuery(sql);
+            /*
+             * executeQuery():
+             * - SELECT文の実行用
+             * - 戻り値: ResultSet（検索結果）
+             * - ResultSetは表形式のデータ
+             */
+            
+            // 4. 結果セットからデータを取得（ループ）
+            while (rs.next()) {
+                /*
+                 * rs.next():
+                 * - 次の行に移動
+                 * - データがあればtrue、なければfalse
+                 * - 最初の呼び出しで1行目に移動
+                 */
+                
+                // 新しいBoardDataオブジェクトを作成
+                BoardData data = new BoardData();
+                
+                // ResultSetから各カラムの値を取得してセット
+                data.setId(rs.getInt("id"));
+                /*
+                 * rs.getInt("カラム名"):
+                 * - 指定されたカラムの値をint型で取得
+                 * - カラム名で指定（インデックスでも可）
+                 */
+                
+                data.setTitle(rs.getString("title"));
+                data.setName(rs.getString("name"));
+                data.setMessage(rs.getString("message"));
+                /*
+                 * rs.getString("カラム名"):
+                 * - 指定されたカラムの値をString型で取得
+                 */
+                
+                // Timestamp型 → String型に変換
+                Timestamp ts = rs.getTimestamp("post_date");
+                data.setPostDate(ts.toString());
+                /*
+                 * Timestamp型:
+                 * - データベースの日時型
+                 * - toString()で文字列に変換
+                 * - 形式: "2025-10-10 18:25:26.123"
+                 */
+                
+                data.setRemoteAddress(rs.getString("remote_address"));
+                data.setViewCount(rs.getInt("view_count"));
+                
+                // リストに追加
+                dataList.add(data);
+            }
+            
+        } catch (SQLException e) {
+            // SQLエラーが発生した場合
+            System.out.println("addChatData SQLException エラー");
+            e.printStackTrace();
+            
+        } finally {
+            // リソースをクローズ
+            closeResources(conn, stmt, rs);
+        }
+        
+        // 取得したリストを返す（空の場合もあり）
+        return dataList;
+    }
+    
+    /**
+     * 【getDataById メソッド】
+     * ID指定で1件の投稿データを取得
+     * 
+     * @param id 取得したい投稿のID
+     * @return 見つかった投稿データ、見つからない場合はnull
+     */
+    public static BoardData getDataById(int id) {
+        // WHERE句でID指定
+        String sql = "SELECT * FROM public.board_data WHERE id = ?";
+        
+        Connection conn = null;
+        PreparedStatement pstmt = null;
+        ResultSet rs = null;
+        
+        try {
+            // 1. データベースに接続
+            conn = DBConnection.getConnection();
+            
+            // 2. SQL準備
+            pstmt = conn.prepareStatement(sql);
+            pstmt.setInt(1, id);  // ?にIDを設定
+            /*
+             * setInt(index, value):
+             * - int型の値を設定
+             * - WHERE id = 123 のようになる
+             */
+            
+            // 3. SQL実行
+            rs = pstmt.executeQuery();
+            
+            // 4. 結果を確認（1件のみ取得）
+            if (rs.next()) {
+                // データが見つかった場合
+                BoardData data = new BoardData();
+                data.setId(rs.getInt("id"));
+                data.setTitle(rs.getString("title"));
+                data.setName(rs.getString("name"));
+                data.setMessage(rs.getString("message"));
+                
+                Timestamp ts = rs.getTimestamp("post_date");
+                data.setPostDate(ts.toString());
+                
+                data.setRemoteAddress(rs.getString("remote_address"));
+                data.setViewCount(rs.getInt("view_count"));
+                
+                return data;  // 見つかったデータを返す
+            }
+            // rs.next()がfalseの場合、データなし
+            
+        } catch (SQLException e) {
+            System.out.println("getDataById SQLException エラー");
+            e.printStackTrace();
+            
+        } finally {
+            closeResources(conn, pstmt, rs);
+        }
+        
+        // データが見つからなかった場合
+        return null;
+    }
+    
+    /**
+     * 【updateData メソッド】
+     * 投稿を更新する
+     * 
+     * @param id 更新対象の投稿ID
+     * @param title 新しいタイトル
+     * @param name 新しい投稿者名
      * @param message 新しいメッセージ
      * @return 成功時true、失敗時false
-     * - 既存の投稿内容を変更できるようにする
+     * 
+     * 処理内容:
+     * - 指定されたIDの投稿を更新
+     * - post_dateも現在時刻に更新される
      */
-	public static boolean updateData(int id, String name, String message) {
-		BoardData data = getDataById(id);
-		if (data != null) {
-			data.setName(name);
-			data.setMessage(message);
-			data.setPostDate(sdformat.format(new Date()) + " (編集済)");
-			return true;
-		}
-		return false;
-	}
-
-	/**
+    public static boolean updateData(int id, String title, String name, String message) {
+        // UPDATE文の準備
+        // WHERE id = ?: 指定されたIDの行のみ更新
+        String sql = "UPDATE public.board_data SET title = ?, name = ?, message = ?, " +
+                     "post_date = CURRENT_TIMESTAMP WHERE id = ?";
+        /*
+         * UPDATE文の構造:
+         * UPDATE テーブル名 SET カラム1 = 値1, カラム2 = 値2 WHERE 条件
+         * WHERE句がないと全データが更新されるので注意！
+         */
+        
+        Connection conn = null;
+        PreparedStatement pstmt = null;
+        
+        try {
+            // 1. データベースに接続
+            conn = DBConnection.getConnection();
+            
+            // 2. SQL準備
+            pstmt = conn.prepareStatement(sql);
+            
+            // 3. パラメータ設定
+            pstmt.setString(1, title);    // SET title = ?
+            pstmt.setString(2, name);     // SET name = ?
+            pstmt.setString(3, message);  // SET message = ?
+            pstmt.setInt(4, id);          // WHERE id = ?
+            /*
+             * パラメータの順序に注意:
+             * SQL文の?の順番通りに設定する必要がある
+             */
+            
+            // 4. SQL実行
+            int result = pstmt.executeUpdate();
+            /*
+             * executeUpdate()の戻り値:
+             * - 更新された行数
+             * - IDが存在する場合: 1
+             * - IDが存在しない場合: 0
+             */
+            
+            // 5. 結果を返す
+            return result > 0;  // 1行以上更新されたら成功
+            
+        } catch (SQLException e) {
+            System.out.println("updateData SQLException エラー");
+            e.printStackTrace();
+            return false;
+            
+        } finally {
+            closeResources(conn, pstmt, null);
+        }
+    }
+    
+    /**
+     * 【deleteData メソッド】
      * 投稿を削除する
+     * 
      * @param id 削除対象の投稿ID
      * @return 成功時true、失敗時false
-     * - 不要な投稿を削除できるようにする
      */
-	public static boolean deleteData(int id) {
-		BoardData data = getDataById(id);
-		if (data != null) {
-			board.remove(data);
-			return true;
-		}
-		return false;
-	}
-
-	// ========== 補足情報 ==========
-
-	/*
-	 * 【このクラスの問題点と解決策】
-	 * 
-	 * 問題点1: データが永続化されない
-	 * - サーバー再起動で全データが消える
-	 * - 解決策: データベース（MySQL、PostgreSQL等）を使用
-	 * 
-	 * 問題点2: メモリ使用量の制限
-	 * - 投稿が増え続けるとメモリ不足になる
-	 * - 解決策: 最大件数制限、古いデータの自動削除、ページング
-	 * 
-	 * 問題点3: SimpleDateFormatはスレッドセーフではない
-	 * - staticで共有しているため、同時アクセスで問題が起こる可能性
-	 * - 解決策: Java 8以降のDateTimeFormatter使用
-	 *   private static DateTimeFormatter formatter = 
-	 *       DateTimeFormatter.ofPattern("yyyy/MM/dd HH:mm:ss");
-	 * 
-	 * 問題点4: 機能が少ない
-	 * - 削除機能、編集機能、検索機能がない
-	 * - 解決策: メソッドを追加
-	 *   public static boolean deleteData(int index)
-	 *   public static boolean updateData(int index, BoardData newData)
-	 *   public static List<BoardData> searchData(String keyword)
-	 */
-
+    public static boolean deleteData(int id) {
+        // DELETE文の準備
+        String sql = "DELETE FROM public.board_data WHERE id = ?";
+        /*
+         * DELETE文の構造:
+         * DELETE FROM テーブル名 WHERE 条件
+         * WHERE句がないと全データが削除されるので必須！
+         */
+        
+        Connection conn = null;
+        PreparedStatement pstmt = null;
+        
+        try {
+            // 1. データベースに接続
+            conn = DBConnection.getConnection();
+            
+            // 2. SQL準備
+            pstmt = conn.prepareStatement(sql);
+            pstmt.setInt(1, id);  // WHERE id = ?
+            
+            // 3. SQL実行
+            int result = pstmt.executeUpdate();
+            /*
+             * executeUpdate()の戻り値:
+             * - 削除された行数
+             * - 削除成功: 1
+             * - IDが存在しない: 0
+             */
+            
+            // 4. 結果を返す
+            return result > 0;
+            
+        } catch (SQLException e) {
+            System.out.println("deleteData SQLException エラー");
+            e.printStackTrace();
+            return false;
+            
+        } finally {
+            closeResources(conn, pstmt, null);
+        }
+    }
+    
+    /**
+     * 【incrementViewCount メソッド】
+     * 閲覧数を1増やす
+     * 
+     * @param id 対象の投稿ID
+     * 
+     * 使用箇所:
+     * - 詳細画面を表示した時に呼ばれる
+     * - 閲覧数をカウントアップ
+     */
+    public static void incrementViewCount(int id) {
+        // view_count を +1 するSQL
+        String sql = "UPDATE public.board_data SET view_count = view_count + 1 WHERE id = ?";
+        /*
+         * view_count = view_count + 1:
+         * - 現在の値に1を加算
+         * - 例: 5 → 6
+         */
+        
+        Connection conn = null;
+        PreparedStatement pstmt = null;
+        
+        try {
+            conn = DBConnection.getConnection();
+            pstmt = conn.prepareStatement(sql);
+            pstmt.setInt(1, id);
+            
+            pstmt.executeUpdate();
+            // 戻り値をチェックしない（失敗してもエラー表示のみ）
+            
+        } catch (SQLException e) {
+            System.out.println("incrementViewCount SQLException エラー");
+            e.printStackTrace();
+            
+        } finally {
+            closeResources(conn, pstmt, null);
+        }
+    }
+    
+    /**
+     * 【closeResources メソッド】
+     * データベース関連のリソースをクローズする
+     * @param conn データベース接続
+     * @param stmt Statement または PreparedStatement
+     * @param rs ResultSet
+     * クローズの順序:
+     * 1. ResultSet (検索結果)
+     * 2. Statement (SQL実行オブジェクト)
+     * 3. Connection (データベース接続)
+     * → 開いた順と逆にクローズ
+     */
+    private static void closeResources(Connection conn, Statement stmt, ResultSet rs) {
+        // ResultSetをクローズ
+        if (rs != null) {
+            /*
+             * null チェック:
+             * - SELECT文以外ではrsはnull
+             * - nullの場合にclose()を呼ぶとエラーになる
+             */
+            try {
+                rs.close();
+            } catch (SQLException e) {
+                e.printStackTrace();
+            }
+        }
+        
+        // Statementをクローズ
+        if (stmt != null) {
+            try {
+                stmt.close();
+            } catch (SQLException e) {
+                e.printStackTrace();
+            }
+        }
+        
+        // Connectionをクローズ
+        DBConnection.closeConnection(conn);
+        /*
+         * DBConnection.closeConnection():
+         * - null チェックと例外処理を含む
+         * - 確実にクローズしてくれる
+         */
+    }
 }

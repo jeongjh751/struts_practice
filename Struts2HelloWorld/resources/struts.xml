@@ -15,24 +15,43 @@
     <!-- 開発モード：エラー詳細表示、自動リロード有効 -->
     <constant name="struts.devMode" value="true" />    
 	<package name="default" extends="struts-default">
-        <!-- デフォルトアクション -->
-        <action name="board" class="action.BoardAction" method="execute">
-            <result>/board.jsp</result>
+         <!-- 一覧表示 (トップページ) -->
+        <action name="boardList" class="action.BoardAction" method="list">
+            <result name="list">/board/list.jsp</result>
         </action>
         
-        <!-- 更新アクション -->
-        <action name="boardUpdate" class="action.BoardAction" method="update">
-            <result>/board.jsp</result>
+        <!-- 詳細表示 -->
+        <action name="boardDetail" class="action.BoardAction" method="detail">
+            <result name="detail">/board/detail.jsp</result>
+            <result name="error">/board/list.jsp</result>
         </action>
         
-        <!-- 編集アクション -->
+        <!-- 新規投稿フォーム表示 -->
+        <action name="boardInput" class="action.BoardAction" method="input">
+            <result name="input">/board/input.jsp</result>
+        </action>
+        
+        <!-- 投稿実行 -->
+        <action name="boardCreate" class="action.BoardAction" method="execute">
+            <result name="success" type="redirect">boardList.action</result>
+            <result name="input">/board/input.jsp</result>
+        </action>
+        
+        <!-- 編集フォーム表示 -->
+        <action name="boardEditForm" class="action.BoardAction" method="editForm">
+            <result name="edit">/board/edit.jsp</result>
+            <result name="list" type="redirect">boardList.action</result>
+        </action>
+        
+        <!-- 編集実行 -->
         <action name="boardEdit" class="action.BoardAction" method="edit">
-            <result>/board.jsp</result>
+            <result name="list" type="redirect">boardList.action</result>
         </action>
         
-        <!-- 削除アクション -->
+        
+        <!-- 削除 -->
         <action name="boardDelete" class="action.BoardAction" method="delete">
-            <result>/board.jsp</result>
+            <result name="list" type="redirect">boardList.action</result>
         </action>
     </package>
 </struts>

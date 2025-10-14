@@ -6,13 +6,12 @@
 <html>
 	<head>
 		<meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
-		<title>Struts2でHelloWorld</title>
+		<title>Hello掲示板</title>
 	</head>
 	<body>
-		<!-- 入力フォームはStruts2のタグを使用する -->
-		<s:form action="hello">
-			<s:textfield name="name" />
-			<s:submit value="HelloWorldページへ行く" />
-		</s:form>
+	<%
+	// アクセスしたら即座にboardList.actionへリダイレクト
+	response.sendRedirect("boardList.action");
+	%>
 	</body>
 </html>
