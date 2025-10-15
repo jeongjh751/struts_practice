@@ -5,7 +5,6 @@ import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.sql.Statement;
-import java.sql.Timestamp;
 import java.util.ArrayList;
 import java.util.List;
 
@@ -29,10 +28,11 @@ public class Board {
      * 【addChatData メソッド】
      * 掲示板に新しい投稿を追加する
      * 
+     * @param category カテゴリ（自由/お知らせ/質問/設問）
      * @param title タイトル
-     * @param name 投稿者名
-     * @param message メッセージ本文
-     * @param remoteAddress 投稿者のIPアドレス
+     * @param content 本文
+     * @param writer 投稿者名
+     * @param ipAddress 投稿者のIPアドレス
      * @return 成功時true、失敗時false
      * 
      * 処理の流れ:
@@ -43,16 +43,23 @@ public class Board {
      * 5. 結果を確認
      * 6. リソースをクローズ
      */
-    public static boolean addChatData(String title, String name, String message, String remoteAddress) {
+    public static boolean addChatData(String category, String title, String content, 
+            String writer, String ipAddress) {
         // INSERT文の準備
         // public.board_data: publicスキーマのboard_dataテーブル
         // ?: プレースホルダー（後で値を設定）
-        String sql = "INSERT INTO public.board_data (title, name, message, remote_address, post_date, view_count) " +
-                     "VALUES (?, ?, ?, ?, CURRENT_TIMESTAMP, 0)";
+        String sql = "INSERT INTO board_data (category, title, content, writer, ip_address) " +
+                "VALUES (?, ?, ?, ?, ?::inet)";
         /*
-         * CURRENT_TIMESTAMP: 現在日時を自動設定
-         * view_count: 初期値0
-         * id: SERIAL型なので自動採番される
+         * - inet
+         * - PostgreSQL特有の型キャスト
+         * - 文字列をINET型（IPアドレス型）に変換
+         * 
+         * 自動設定されるカラム:
+         * - board_id: BIGSERIAL型なので自動採番
+         * - created_at: DEFAULT CURRENT_TIMESTAMP（現在時刻）
+         * - view_count, like_count DEFAULT 0
+         * - is_notice, is_deleted DEFAULT FALSE
          */
         
         // リソース変数の宣言
@@ -74,18 +81,19 @@ public class Board {
             /*
              * PreparedStatement:
              * - SQLインジェクション対策
-             * - ?の部分にパラメータを安全に設定できる
              * - 同じSQL文を複数回実行する場合に高速
              */
             
-            // 3. パラメータを設定（?の部分に値を入れる）
-            pstmt.setString(1, title);         // 1番目 → title
-            pstmt.setString(2, name);          // 2番目 → name
-            pstmt.setString(3, message);       // 3番目 → message
-            pstmt.setString(4, remoteAddress); // 4番目 → remoteAddress
+            // 3. パラメータを設定
+            pstmt.setString(1, category);   // 1番目 → category
+            pstmt.setString(2, title);      // 2番目 → title
+            pstmt.setString(3, content);    // 3番目 → content
+            pstmt.setString(4, writer);     // 4番目 → writer
+            pstmt.setString(5, ipAddress);  // 5番目 → ipAddress
+            
             /*
              * setString(index, value):
-             * - index: ?の位置（1から始まる）
+             * - index: 〇番の位置（1から始まる）
              * - value: 設定する値
              * - 自動的にエスケープ処理される（安全）
              */
@@ -138,7 +146,11 @@ public class Board {
     public static List<BoardData> getChatData() {
         // SELECT文の準備
         // ORDER BY post_date DESC: 投稿日時の降順（新しい順）
-        String sql = "SELECT * FROM public.board_data ORDER BY post_date DESC";
+        String sql = "SELECT * FROM board_data " +
+                "WHERE is_deleted = FALSE " +
+                "ORDER BY " +
+                "CASE WHEN category = 'お知らせ' THEN 0 ELSE 1 END, " +
+                "created_at DESC";
         
         // リソース変数の宣言
         Connection conn = null;      // データベース接続
@@ -162,7 +174,7 @@ public class Board {
              * Statement vs PreparedStatement:
              * - Statement: パラメータなしのSQL用
              * - PreparedStatement: パラメータありのSQL用
-             * 今回は?がないのでStatementを使用
+             * 今回はないのでStatementを使用
              */
             
             // 3. SQL実行
@@ -187,33 +199,49 @@ public class Board {
                 BoardData data = new BoardData();
                 
                 // ResultSetから各カラムの値を取得してセット
-                data.setId(rs.getInt("id"));
+                data.setBoardId(rs.getLong("board_id"));                
                 /*
-                 * rs.getInt("カラム名"):
-                 * - 指定されたカラムの値をint型で取得
+                 * rs.getLong("カラム名"):
+                 * - 指定されたカラムの値をlong型で取得
                  * - カラム名で指定（インデックスでも可）
                  */
                 
+                data.setCategory(rs.getString("category"));
                 data.setTitle(rs.getString("title"));
-                data.setName(rs.getString("name"));
-                data.setMessage(rs.getString("message"));
+                data.setContent(rs.getString("content"));
+                data.setWriter(rs.getString("writer"));
                 /*
                  * rs.getString("カラム名"):
                  * - 指定されたカラムの値をString型で取得
                  */
                 
-                // Timestamp型 → String型に変換
-                Timestamp ts = rs.getTimestamp("post_date");
-                data.setPostDate(ts.toString());
+                // Timestamp型で取得（日付時刻）
+                data.setCreatedAt(rs.getTimestamp("created_at"));
+                data.setUpdatedAt(rs.getTimestamp("updated_at"));
                 /*
                  * Timestamp型:
                  * - データベースの日時型
                  * - toString()で文字列に変換
-                 * - 形式: "2025-10-10 18:25:26.123"
                  */
                 
-                data.setRemoteAddress(rs.getString("remote_address"));
+                // カウント
                 data.setViewCount(rs.getInt("view_count"));
+                data.setLikeCount(rs.getInt("like_count"));
+                data.setDislikeCount(rs.getInt("dislike_count"));
+                data.setCommentCount(rs.getInt("comment_count"));
+                /*
+                 * rs.getInt("カラム名"):
+                 * - INTEGER型の値を取得
+                 */
+                
+                // IPアドレス
+                data.setIpAddress(rs.getString("ip_address"));
+                
+                // Boolean型のフラグ
+                data.setNotice(rs.getBoolean("is_notice"));
+                data.setImage(rs.getBoolean("is_image"));
+                data.setSecret(rs.getBoolean("is_secret"));
+                data.setDeleted(rs.getBoolean("is_deleted"));
                 
                 // リストに追加
                 dataList.add(data);
@@ -240,9 +268,9 @@ public class Board {
      * @param id 取得したい投稿のID
      * @return 見つかった投稿データ、見つからない場合はnull
      */
-    public static BoardData getDataById(int id) {
+    public static BoardData getDataById(long id) {
         // WHERE句でID指定
-        String sql = "SELECT * FROM public.board_data WHERE id = ?";
+    	String sql = "SELECT * FROM board_data WHERE board_id = ? AND is_deleted = FALSE";
         
         Connection conn = null;
         PreparedStatement pstmt = null;
@@ -254,7 +282,7 @@ public class Board {
             
             // 2. SQL準備
             pstmt = conn.prepareStatement(sql);
-            pstmt.setInt(1, id);  // ?にIDを設定
+            pstmt.setLong(1, id);  // ?にIDを設定
             /*
              * setInt(index, value):
              * - int型の値を設定
@@ -268,16 +296,22 @@ public class Board {
             if (rs.next()) {
                 // データが見つかった場合
                 BoardData data = new BoardData();
-                data.setId(rs.getInt("id"));
+                data.setBoardId(rs.getLong("board_id"));
+                data.setCategory(rs.getString("category"));
                 data.setTitle(rs.getString("title"));
-                data.setName(rs.getString("name"));
-                data.setMessage(rs.getString("message"));
-                
-                Timestamp ts = rs.getTimestamp("post_date");
-                data.setPostDate(ts.toString());
-                
-                data.setRemoteAddress(rs.getString("remote_address"));
+                data.setContent(rs.getString("content"));
+                data.setWriter(rs.getString("writer"));
+                data.setCreatedAt(rs.getTimestamp("created_at"));
+                data.setUpdatedAt(rs.getTimestamp("updated_at"));
                 data.setViewCount(rs.getInt("view_count"));
+                data.setLikeCount(rs.getInt("like_count"));
+                data.setDislikeCount(rs.getInt("dislike_count"));
+                data.setCommentCount(rs.getInt("comment_count"));
+                data.setIpAddress(rs.getString("ip_address"));
+                data.setNotice(rs.getBoolean("is_notice"));
+                data.setImage(rs.getBoolean("is_image"));
+                data.setSecret(rs.getBoolean("is_secret"));
+                data.setDeleted(rs.getBoolean("is_deleted"));
                 
                 return data;  // 見つかったデータを返す
             }
@@ -300,20 +334,22 @@ public class Board {
      * 投稿を更新する
      * 
      * @param id 更新対象の投稿ID
-     * @param title 新しいタイトル
-     * @param name 新しい投稿者名
-     * @param message 新しいメッセージ
+     * @param category カテゴリ
+     * @param title タイトル
+     * @param content 本文
+     * @param writer 投稿者名
      * @return 成功時true、失敗時false
      * 
      * 処理内容:
      * - 指定されたIDの投稿を更新
      * - post_dateも現在時刻に更新される
      */
-    public static boolean updateData(int id, String title, String name, String message) {
+    public static boolean updateData(long id, String category, String title, 
+            String content, String writer) {
         // UPDATE文の準備
         // WHERE id = ?: 指定されたIDの行のみ更新
-        String sql = "UPDATE public.board_data SET title = ?, name = ?, message = ?, " +
-                     "post_date = CURRENT_TIMESTAMP WHERE id = ?";
+        String sql = "UPDATE board_data SET category = ?, title = ?, content = ?, writer = ? " +
+                "WHERE board_id = ? AND is_deleted = FALSE";
         /*
          * UPDATE文の構造:
          * UPDATE テーブル名 SET カラム1 = 値1, カラム2 = 値2 WHERE 条件
@@ -331,10 +367,11 @@ public class Board {
             pstmt = conn.prepareStatement(sql);
             
             // 3. パラメータ設定
-            pstmt.setString(1, title);    // SET title = ?
-            pstmt.setString(2, name);     // SET name = ?
-            pstmt.setString(3, message);  // SET message = ?
-            pstmt.setInt(4, id);          // WHERE id = ?
+            pstmt.setString(1, category);  // SET category = ?
+            pstmt.setString(2, title);     // SET title = ?
+            pstmt.setString(3, content);   // SET content = ?
+            pstmt.setString(4, writer);    // SET writer = ?
+            pstmt.setLong(5, id);          // WHERE board_id = ?
             /*
              * パラメータの順序に注意:
              * SQL文の?の順番通りに設定する必要がある
@@ -369,9 +406,10 @@ public class Board {
      * @param id 削除対象の投稿ID
      * @return 成功時true、失敗時false
      */
-    public static boolean deleteData(int id) {
+    public static boolean deleteData(long id) {
         // DELETE文の準備
-        String sql = "DELETE FROM public.board_data WHERE id = ?";
+        String sql = "UPDATE board_data SET is_deleted = TRUE " +
+                "WHERE board_id = ? AND is_deleted = FALSE";
         /*
          * DELETE文の構造:
          * DELETE FROM テーブル名 WHERE 条件
@@ -387,7 +425,7 @@ public class Board {
             
             // 2. SQL準備
             pstmt = conn.prepareStatement(sql);
-            pstmt.setInt(1, id);  // WHERE id = ?
+            pstmt.setLong(1, id);  // WHERE id = ?
             
             // 3. SQL実行
             int result = pstmt.executeUpdate();
@@ -421,9 +459,10 @@ public class Board {
      * - 詳細画面を表示した時に呼ばれる
      * - 閲覧数をカウントアップ
      */
-    public static void incrementViewCount(int id) {
+    public static void incrementViewCount(long id) {
         // view_count を +1 するSQL
-        String sql = "UPDATE public.board_data SET view_count = view_count + 1 WHERE id = ?";
+        String sql = "UPDATE board_data SET view_count = view_count + 1 " +
+                "WHERE board_id = ? AND is_deleted = FALSE";
         /*
          * view_count = view_count + 1:
          * - 現在の値に1を加算
@@ -436,7 +475,7 @@ public class Board {
         try {
             conn = DBConnection.getConnection();
             pstmt = conn.prepareStatement(sql);
-            pstmt.setInt(1, id);
+            pstmt.setLong(1, id);
             
             pstmt.executeUpdate();
             // 戻り値をチェックしない（失敗してもエラー表示のみ）

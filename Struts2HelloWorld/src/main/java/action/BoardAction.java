@@ -52,19 +52,27 @@ public class BoardAction extends ActionSupport {
 	// ========== フィールド宣言 ==========
 	// これらのフィールドはStruts2によって自動的にバインドされる
 
-	private int id; // 編集/削除対象のID
+	private long boardId; // 編集/削除対象のID
     /*
      * 1. 編集・削除する投稿のIDを受け取るためのフィールド
      * 2. JSPから<input type="hidden" name="id" value="..."/>で送られてくる
      * 3. Struts2が自動的にsetId()を呼び出して値を設定する
      */
 	
+	private String category;
+	
 	private String title;
 	/*
 	 * 【投稿タイトルを保持するフィールド】
 	 */
+
+	private String content;
+	/*
+	 * 【投稿メッセージを保持するフィールド】
+	 * JSPの <s:textfield name="message"/> と対応
+	 */
 	
-	private String name;
+	private String writer;
 	/*
 	 * 【投稿者名を保持するフィールド】
 	 * 
@@ -75,13 +83,8 @@ public class BoardAction extends ActionSupport {
 	 * 4. このnameフィールドに「太郎」が設定される
 	 */
 
-	private String message;
-	/*
-	 * 【投稿メッセージを保持するフィールド】
-	 * JSPの <s:textfield name="message"/> と対応
-	 */
 
-	private String remoteAddress;
+	private String ipAdress;
 	/*
 	 * 【投稿者のIPアドレスを保持するフィールド】
 	 * JSPの <input type="hidden" name="remoteAddress"/> と対応
@@ -123,15 +126,22 @@ public class BoardAction extends ActionSupport {
 	// Struts2のフレームワークがこれらのメソッドを使って
 	// 自動的にデータのやり取りを行う
 	
-	public int getId() {
-		return id;
+	public long getBoardId() {
+		return boardId;
 	}
 
-	public void setId(int id) {
-		this.id = id;
+	public void setBoardId(long boardId) {
+		this.boardId = boardId;
 	}
 	
-	
+    public String getCategory() {
+        return category;
+    }
+    
+    public void setCategory(String category) {
+        this.category = category;
+    }
+    
     public String getTitle() {
         return title;
     }
@@ -139,14 +149,29 @@ public class BoardAction extends ActionSupport {
     public void setTitle(String title) {
         this.title = title;
     }
-    
+
+	/**
+	 * 投稿メッセージを取得
+	 * @return メッセージ本文
+	 */
+	public String getContent() {
+		return content;
+	}
+
+	/**
+	 * 内容を設定
+	 * @param content 内容本文
+	 */
+	public void setContent(String content) {
+		this.content = content;
+	}
 
 	/**
 	 * 投稿者名を取得
 	 * @return 投稿者名
 	 */
-	public String getName() {
-		return name;
+	public String getWriter() {
+		return writer;
 	}
 
 	/**
@@ -159,40 +184,24 @@ public class BoardAction extends ActionSupport {
 	 * 2. このsetName()メソッドを呼び出して値を設定
 	 * 3. その後、execute()メソッドが実行される
 	 */
-	public void setName(String name) {
-		this.name = name;
-	}
-
-	/**
-	 * 投稿メッセージを取得
-	 * @return メッセージ本文
-	 */
-	public String getMessage() {
-		return message;
-	}
-
-	/**
-	 * 投稿メッセージを設定
-	 * @param message メッセージ本文
-	 */
-	public void setMessage(String message) {
-		this.message = message;
+	public void setWriter(String writer) {
+		this.writer = writer;
 	}
 
 	/**
 	 * IPアドレスを取得
 	 * @return IPアドレス
 	 */
-	public String getRemoteAddress() {
-		return remoteAddress;
+	public String getIpAddress() {
+		return ipAdress;
 	}
 
 	/**
 	 * IPアドレスを設定
-	 * @param remoteAddress IPアドレス
+	 * @param ipAddress IPアドレス
 	 */
-	public void setRemoteAddress(String remoteAddress) {
-		this.remoteAddress = remoteAddress;
+	public void setIpAddress(String ipAddress) {
+		this.ipAdress = ipAddress;
 	}
 
 	/**
@@ -231,9 +240,9 @@ public class BoardAction extends ActionSupport {
     
     // 詳細表示
     public String detail() {
-        item = Board.getDataById(id);
+        item = Board.getDataById(boardId);
         if (item != null) {
-            Board.incrementViewCount(id);  // 閲覧数+1
+            Board.incrementViewCount(boardId);  // 閲覧数+1
             return "detail";
         } else {
             addActionError("投稿が見つかりませんでした");
@@ -268,7 +277,7 @@ public class BoardAction extends ActionSupport {
 	 */
     public String execute() {
         if (isValid()) {
-            boolean success = Board.addChatData(title, name, message, remoteAddress);
+            boolean success = Board.addChatData(category, title, content, writer, ipAdress);
             if (success) {
                 return "success";
             } else {
@@ -302,12 +311,11 @@ public class BoardAction extends ActionSupport {
 	
 	  
     public String editForm() {
-        item = Board.getDataById(id);
+        item = Board.getDataById(boardId);
         if (item != null) {
             // 既存データをフィールドに設定
             this.title = item.getTitle();
-            this.name = item.getName();
-            this.message = item.getMessage();
+            this.content = item.getContent();
             return "edit";
         } else {
             addActionError("投稿が見つかりませんでした");
@@ -324,9 +332,9 @@ public class BoardAction extends ActionSupport {
      * @return "success"を返してboard.jspを表示
      */
 	public String edit() {
-		if (title != null && name != null && message != null &&
-				!title.equals("") && !name.equals("") && !message.equals("")) {
-			boolean success = Board.updateData(id, title, name, message);
+		if (title != null && content != null && writer != null &&
+				!title.equals("") && !content.equals("") && !writer.equals("")) {
+			boolean success = Board.updateData(boardId, category, title, content, writer);
 			if (!success) {
 				addActionError("投稿が見つかりませんでした");
 			}
@@ -344,7 +352,7 @@ public class BoardAction extends ActionSupport {
      * @return "success"を返してboard.jspを表示
      */
 	public String delete() {
-		boolean success = Board.deleteData(id);
+		boolean success = Board.deleteData(boardId);
 		if (!success) {
 			addActionError("投稿が見つかりませんでした");
 		}
@@ -376,7 +384,7 @@ public class BoardAction extends ActionSupport {
             addActionError("タイトルを入力してください");
         }
 		
-		if (name == null || name.equals("")) {
+		if (writer == null || writer.equals("")) {
 			/*
 			 * 【名前の必須チェック】
 			 * - name == null: フォームに名前フィールドが存在しない場合
@@ -403,9 +411,9 @@ public class BoardAction extends ActionSupport {
 			 */
 		}
 
-		if (message == null || message.equals("")) {
+		if (content == null || content.equals("")) {
 			/*
-			 * 【メッセージの必須チェック】
+			 * 【内容の必須チェック】
 			 * 名前と同じロジック
 			 */
 
