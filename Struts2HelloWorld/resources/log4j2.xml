@@ -1,23 +1,187 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<!DOCTYPE configuration>
-<Configuration status="off">
+<Configuration status="WARN">
+    <!-- status="WARN": Log4j自体のログレベル（通常はWARNでOK） -->
+    
+    <!-- ========== Appenders: ログの出力先を定義 ========== -->
     <Appenders>
-        <Console name="STDOUT" target="SYSTEM_OUT">
-            <PatternLayout>
-                <pattern>[%d{yyyy-MM-dd HH:mm:ss.SSS}], %-5p, %t, %c, %m%n</pattern>
-            </PatternLayout>
+        
+        <!-- コンソール出力 -->
+        <Console name="Console" target="SYSTEM_OUT">
+            <PatternLayout pattern="[%d{yyyy-MM-dd HH:mm:ss.SSS}] [%-5level] [%c{1}:%L] - %msg%n"/>
         </Console>
-        <RollingFile name="FILE" fileName="./log/appLog.log" filePattern="appLog-%d{yyyy-MM-dd}-%i.log">
-            <TimeBasedTriggeringPolicy />
-<!--            <SizeBasedTriggeringPolicy size="100MB" /> -->
-            <DefaultRolloverStrategy max="3"/>
+        
+        <!-- 全体ログファイル: すべてのログレベル -->
+        <RollingFile name="AppLogFile" 
+                     fileName="C:/apache-tomcat-9.0.55/logs/application.log"
+                     filePattern="C:/apache-tomcat-9.0.55/logs/application-%d{yyyy-MM-dd}-%i.log">
+<!--        <RollingFile name="AppLogFile" -->
+<!--             fileName="logs/application.log"-->
+<!--             filePattern="logs/application-%d{yyyy-MM-dd}-%i.log">-->
+            <PatternLayout>
+                <pattern>[%d{yyyy-MM-dd HH:mm:ss}] [%-5level] [%c{1}:%L] - %msg%n</pattern>
+            </PatternLayout>
+            <Policies>
+                <SizeBasedTriggeringPolicy size="10MB"/>
+                <TimeBasedTriggeringPolicy interval="1"/>
+            </Policies>
+            <DefaultRolloverStrategy max="10"/>
         </RollingFile>
+        
+        <!-- DEBUGログファイル: DEBUG以上 -->
+        <RollingFile name="DebugLogFile" 
+                     fileName="C:/apache-tomcat-9.0.55/logs/debug.log"
+                     filePattern="C:/apache-tomcat-9.0.55/logs/debug-%d{yyyy-MM-dd}-%i.log">
+            <PatternLayout>
+                <pattern>[%d{yyyy-MM-dd HH:mm:ss}] [%-5level] [%c{1}:%L] - %msg%n</pattern>
+            </PatternLayout>
+            <Policies>
+                <SizeBasedTriggeringPolicy size="10MB"/>
+                <TimeBasedTriggeringPolicy interval="1"/>
+            </Policies>
+            <DefaultRolloverStrategy max="5"/>
+            <!-- DEBUG以上のみ -->
+            <ThresholdFilter level="DEBUG" onMatch="ACCEPT" onMismatch="DENY"/>
+        </RollingFile>
+        
+        <!-- INFOログファイル: INFO以上 -->
+        <RollingFile name="InfoLogFile" 
+                     fileName="C:/apache-tomcat-9.0.55/logs/info.log"
+                     filePattern="C:/apache-tomcat-9.0.55/logs/info-%d{yyyy-MM-dd}-%i.log">
+            <PatternLayout>
+                <pattern>[%d{yyyy-MM-dd HH:mm:ss}] [%-5level] [%c{1}:%L] - %msg%n</pattern>
+            </PatternLayout>
+            <Policies>
+                <SizeBasedTriggeringPolicy size="10MB"/>
+                <TimeBasedTriggeringPolicy interval="1"/>
+            </Policies>
+            <DefaultRolloverStrategy max="5"/>
+            <!-- INFO以上のみ -->
+            <ThresholdFilter level="INFO" onMatch="ACCEPT" onMismatch="DENY"/>
+        </RollingFile>
+        
+        <!-- ERRORログファイル: ERROR以上 -->
+        <RollingFile name="ErrorLogFile" 
+                     fileName="C:/apache-tomcat-9.0.55/logs/error.log"
+                     filePattern="C:/apache-tomcat-9.0.55/logs/error-%d{yyyy-MM-dd}-%i.log">
+            <PatternLayout>
+                <pattern>[%d{yyyy-MM-dd HH:mm:ss}] [%-5level] [%c{1}:%L] - %msg%n</pattern>
+            </PatternLayout>
+            <Policies>
+                <SizeBasedTriggeringPolicy size="10MB"/>
+                <TimeBasedTriggeringPolicy interval="1"/>
+            </Policies>
+            <DefaultRolloverStrategy max="10"/>
+            <!-- ERROR以上のみ -->
+            <ThresholdFilter level="ERROR" onMatch="ACCEPT" onMismatch="DENY"/>
+        </RollingFile>
+        
     </Appenders>
-
+    
+    <!-- ========== Loggers: どのパッケージがどのログレベルでどこに出力するか ========== -->
     <Loggers>
+        
+        <!-- 自分のパッケージ（package名に合わせて変更） -->
+        <Logger name="action" level="DEBUG" additivity="false">
+            <AppenderRef ref="Console"/>
+            <AppenderRef ref="AppLogFile"/>
+            <AppenderRef ref="DebugLogFile"/>
+            <AppenderRef ref="InfoLogFile"/>
+            <AppenderRef ref="ErrorLogFile"/>
+        </Logger>
+        
+        <Logger name="model" level="DEBUG" additivity="false">
+            <AppenderRef ref="Console"/>
+            <AppenderRef ref="AppLogFile"/>
+            <AppenderRef ref="DebugLogFile"/>
+            <AppenderRef ref="InfoLogFile"/>
+            <AppenderRef ref="ErrorLogFile"/>
+        </Logger>
+        
+        <Logger name="sample" level="DEBUG" additivity="false">
+            <AppenderRef ref="Console"/>
+            <AppenderRef ref="AppLogFile"/>
+            <AppenderRef ref="DebugLogFile"/>
+            <AppenderRef ref="InfoLogFile"/>
+            <AppenderRef ref="ErrorLogFile"/>
+        </Logger>
+        
+        <!-- Struts2フレームワーク: WARNレベル -->
+        <Logger name="com.opensymphony.xwork2" level="WARN"/>
+        <Logger name="org.apache.struts2" level="WARN"/>
+        
+        <!-- データベース関連 -->
+        <Logger name="java.sql" level="DEBUG"/>
+        <Logger name="org.postgresql" level="WARN"/>
+        
+        <!-- ルートロガー: すべてのログのデフォルト設定 -->
         <Root level="DEBUG">
-            <AppenderRef ref="STDOUT" level="INFO"/>
-<!--            <AppenderRef ref="FILE" /> -->
+            <AppenderRef ref="Console"/>
+            <AppenderRef ref="AppLogFile"/>
+            <AppenderRef ref="DebugLogFile"/>
+            <AppenderRef ref="InfoLogFile"/>
+            <AppenderRef ref="ErrorLogFile"/>
         </Root>
+        
     </Loggers>
+    
 </Configuration>
+
+<!-- 
+========== Log4j 2.x の使用方法 ==========
+
+【import文】Log4j 1.xとは違います！
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
+
+【コード例】
+package action;
+
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
+import com.opensymphony.xwork2.ActionSupport;
+
+public class BoardAction extends ActionSupport {
+    // Log4j 2.x のロガー宣言
+    private static final Logger logger = LogManager.getLogger(BoardAction.class);
+    
+    public String execute() {
+        logger.debug("【DEBUG】execute()メソッド開始");
+        logger.info("【INFO】投稿処理実行中");
+        logger.warn("【WARN】警告テスト");
+        logger.error("【ERROR】エラーテスト");
+        
+        try {
+            // 処理...
+            logger.info("投稿成功");
+            return SUCCESS;
+        } catch (Exception e) {
+            logger.error("投稿失敗", e);
+            return ERROR;
+        }
+    }
+}
+
+========== ログファイルの場所 ==========
+${sys:catalina.home}/logs/ = Tomcatのlogsフォルダ
+
+Eclipse内蔵Tomcat:
+workspace/.metadata/.plugins/org.eclipse.wst.server.core/tmp0/logs/
+
+外部Tomcat:
+C:\apache-tomcat-9.0.xx\logs\
+
+生成されるファイル:
+- application.log (全ログ)
+- debug.log (DEBUG以上)
+- info.log (INFO以上)
+- error.log (ERROR以上)
+
+========== ログレベル ==========
+TRACE < DEBUG < INFO < WARN < ERROR < FATAL
+
+DEBUG: 開発用の詳細情報
+INFO: 一般的な情報メッセージ
+WARN: 警告（エラーではないが注意が必要）
+ERROR: エラー情報
+FATAL: 致命的なエラー（システムダウンレベル）
+-->

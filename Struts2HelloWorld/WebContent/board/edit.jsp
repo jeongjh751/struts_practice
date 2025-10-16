@@ -52,14 +52,15 @@
                 <s:textfield name="title" size="50" maxlength="90" value="%{item.title}"/>
             </td>
         </tr>
-        <!-- 投稿者 -->
+		
+		<!-- 投稿者 -->
         <tr>
             <th>名前:</th>
             <td>
                 <s:textfield name="writer" size="20" maxlength="50" value="%{item.writer}"/>
             </td>
         </tr>
-        
+  
         <!-- 本文 -->
         <tr>
             <th>本文:</th>

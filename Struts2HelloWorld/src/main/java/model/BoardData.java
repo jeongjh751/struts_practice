@@ -38,21 +38,13 @@ public class BoardData {
 	
     private String content;
     // 投稿メッセージの本文を保存するフィールド
-	
-    private Timestamp createdAt;
-    // 投稿日時を保存するフィールド
-    // 形式: "yyyy/MM/dd HH:mm:ss" （例: "2025/10/09 16:46:48"）
-    
-	private Timestamp updatedAt;
-    /*
-     * - 投稿が編集された最後の日時
-     * - トリガーで自動更新される
-     * - NULLの場合は未編集
-     */
-	
+
     private String writer;
     // 投稿者の名前を保存するフィールド
     
+    private String updater;
+    // 更新者の名前を保存するフィールド
+
     private int viewCount;
     // 投稿の閲覧数
     
@@ -61,33 +53,10 @@ public class BoardData {
     
     private int dislikeCount;
     // 投稿のよくない数
-    
-    private int commentCount;
-    // 投稿のコメント数
-    
+
     private String ipAddress;
     // 投稿者のIPアドレスを保存するフィールド
     // 形式: "192.168.1.1" または "0:0:0:0:0:0:0:1"（IPv6のlocalhost）
-    private boolean isNotice;
-    /*
-     * 【お知らせフラグ】
-     * - true: お知らせ投稿（上部固定）
-     * - false: 通常投稿
-     * 
-     * 【並び替え】
-     * ORDER BY is_notice DESC, created_at DESC
-     * → お知らせが最上部に表示される
-     */
-    
-    private boolean isImage;
-    /*
-     * - true: 画像あり
-     * - false: テキストのみ
-     * 【使用目的】
-     * - 一覧画面で画像アイコン表示
-     * - 「画像投稿のみ」フィルタリング
-     * - インデックスで高速検索
-     */
     
     private boolean isSecret;
     /*
@@ -111,6 +80,17 @@ public class BoardData {
      * - 削除履歴の追跡
      * - 統計データの保持
      */
+	
+    private Timestamp createdAt;
+    // 投稿日時を保存するフィールド
+    // 形式: "yyyy/MM/dd HH:mm:ss" （例: "2025/10/09 16:46:48"）
+    
+	private Timestamp updatedAt;
+    /*
+     * - 投稿が編集された最後の日時
+     * - トリガーで自動更新される
+     * - NULLの場合は未編集
+     *
     
     // ========== Getterメソッド ==========
     // フィールドの値を取得するためのメソッド
@@ -150,23 +130,6 @@ public class BoardData {
     }
 
     /**
-     * 投稿日時を取得
-     * @return 投稿日時（String形式）
-     */
-    public Timestamp getCreatedAt() {
-        return createdAt;
-        // createdAtフィールドの値をそのまま返す
-    }
-    
-    /**
-     * 更新日時を取得
-     * @return 更新日時
-     */
-    public Timestamp getUpdatedAt() {
-        return updatedAt;
-    }
-    
-    /**
      * 作成者名を取得
      * @return 作成者名
      */
@@ -174,6 +137,14 @@ public class BoardData {
         return writer;
     }
 
+    /**
+     * 更新者名を取得
+     * @return 更新者名
+     */
+    public String getUpdater() {
+        return updater;
+    }
+    
     /**
      * 投稿の閲覧数
      * @return 閲覧数
@@ -199,37 +170,13 @@ public class BoardData {
     }
     
     /**
-     * コメント数を取得
-     * @return コメント数
-     */
-    public int getCommentCount() {
-        return commentCount;
-    }
-    
-    /**
      * 投稿者のIPアドレスを取得
      * @return IPアドレス
      */
     public String getIpAddress() {
         return ipAddress;
     }
-    
-    /**
-     * お知らせフラグを取得
-     * @return お知らせの場合true
-     */
-    public boolean isNotice() {
-        return isNotice;
-    }
-    
-    /**
-     * 画像有無フラグを取得
-     * @return 画像がある場合true
-     */
-    public boolean isImage() {
-        return isImage;
-    }
-    
+
     /**
      * 秘密投稿フラグを取得
      * @return 秘密投稿の場合true
@@ -244,6 +191,23 @@ public class BoardData {
      */
     public boolean isDeleted() {
         return isDeleted;
+    }
+    
+    /**
+     * 投稿日時を取得
+     * @return 投稿日時（String形式）
+     */
+    public Timestamp getCreatedAt() {
+        return createdAt;
+        // createdAtフィールドの値をそのまま返す
+    }
+    
+    /**
+     * 更新日時を取得
+     * @return 更新日時
+     */
+    public Timestamp getUpdatedAt() {
+        return updatedAt;
     }
     
     // ========== Setterメソッド ==========
@@ -288,30 +252,7 @@ public class BoardData {
     public void setContent(String content) {
         this.content = content;
     }
-    
-    /**
-     * 投稿日時を設定
-     * @param createdAt 設定する投稿日時
-     * 
-     * 使用箇所:
-     * - Board.addChatData()メソッド内で新しい投稿データを作成する際に呼ばれる
-     * - data.setCreatedAt(sdformat.format(new Date()));
-     */
-    public void setCreatedAt(Timestamp createdAt) {
-        this.createdAt = createdAt;
-        // this.createdAt: このクラスのフィールド
-        // createdAt: メソッドの引数
-        // this.を付けることで、フィールドと引数を区別する
-    }
-    
-    /**
-     * 更新日時を設定
-     * @param updatedAt 更新日時
-     */
-    public void setUpdatedAt(Timestamp updatedAt) {
-        this.updatedAt = updatedAt;
-    }
-    
+ 
     /**
      * 作成者名を設定
      * @param writer 作成者名
@@ -325,6 +266,14 @@ public class BoardData {
         this.writer = writer;
     }
 
+    /**
+     * 更新者名を設定
+     * @param updater 更新者名
+     */
+    public void setUpdater(String updater) {
+        this.updater = updater;
+    }
+    
     /**
      * 閲覧数を設定
      * @param viewCount 設定する投稿の閲覧数
@@ -351,14 +300,6 @@ public class BoardData {
     }
     
     /**
-     * コメント数を設定
-     * @param commentCount コメント数
-     */
-    public void setCommentCount(int commentCount) {
-        this.commentCount = commentCount;
-    }
-    
-    /**
      * 投稿者のIPアドレスを設定
      * @param ipAddress 設定するIPアドレス
      * 
@@ -368,22 +309,6 @@ public class BoardData {
      */
     public void setIpAddress(String ipAddress) {
         this.ipAddress = ipAddress;
-    }
-    
-    /**
-     * お知らせフラグを設定
-     * @param isNotice お知らせフラグ
-     */
-    public void setNotice(boolean isNotice) {
-        this.isNotice = isNotice;
-    }
-    
-    /**
-     * 画像有無フラグを設定
-     * @param isImage 画像有無フラグ
-     */
-    public void setImage(boolean isImage) {
-        this.isImage = isImage;
     }
     
     /**
@@ -400,6 +325,29 @@ public class BoardData {
      */
     public void setDeleted(boolean isDeleted) {
         this.isDeleted = isDeleted;
+    }
+    
+    /**
+     * 投稿日時を設定
+     * @param createdAt 設定する投稿日時
+     * 
+     * 使用箇所:
+     * - Board.addChatData()メソッド内で新しい投稿データを作成する際に呼ばれる
+     * - data.setCreatedAt(sdformat.format(new Date()));
+     */
+    public void setCreatedAt(Timestamp createdAt) {
+        this.createdAt = createdAt;
+        // this.createdAt: このクラスのフィールド
+        // createdAt: メソッドの引数
+        // this.を付けることで、フィールドと引数を区別する
+    }
+    
+    /**
+     * 更新日時を設定
+     * @param updatedAt 更新日時
+     */
+    public void setUpdatedAt(Timestamp updatedAt) {
+        this.updatedAt = updatedAt;
     }
     
     // ========== その他の情報 ==========

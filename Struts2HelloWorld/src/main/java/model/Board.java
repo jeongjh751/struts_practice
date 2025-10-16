@@ -47,7 +47,6 @@ public class Board {
             String writer, String ipAddress) {
         // INSERT文の準備
         // public.board_data: publicスキーマのboard_dataテーブル
-        // ?: プレースホルダー（後で値を設定）
         String sql = "INSERT INTO board_data (category, title, content, writer, ip_address) " +
                 "VALUES (?, ?, ?, ?, ?::inet)";
         /*
@@ -214,21 +213,11 @@ public class Board {
                  * rs.getString("カラム名"):
                  * - 指定されたカラムの値をString型で取得
                  */
-                
-                // Timestamp型で取得（日付時刻）
-                data.setCreatedAt(rs.getTimestamp("created_at"));
-                data.setUpdatedAt(rs.getTimestamp("updated_at"));
-                /*
-                 * Timestamp型:
-                 * - データベースの日時型
-                 * - toString()で文字列に変換
-                 */
-                
+
                 // カウント
                 data.setViewCount(rs.getInt("view_count"));
                 data.setLikeCount(rs.getInt("like_count"));
                 data.setDislikeCount(rs.getInt("dislike_count"));
-                data.setCommentCount(rs.getInt("comment_count"));
                 /*
                  * rs.getInt("カラム名"):
                  * - INTEGER型の値を取得
@@ -238,10 +227,17 @@ public class Board {
                 data.setIpAddress(rs.getString("ip_address"));
                 
                 // Boolean型のフラグ
-                data.setNotice(rs.getBoolean("is_notice"));
-                data.setImage(rs.getBoolean("is_image"));
                 data.setSecret(rs.getBoolean("is_secret"));
                 data.setDeleted(rs.getBoolean("is_deleted"));
+                
+                // Timestamp型で取得（日付時刻）
+                data.setCreatedAt(rs.getTimestamp("created_at"));
+                data.setUpdatedAt(rs.getTimestamp("updated_at"));
+                /*
+                 * Timestamp型:
+                 * - データベースの日時型
+                 * - toString()で文字列に変換
+                 */
                 
                 // リストに追加
                 dataList.add(data);
@@ -301,17 +297,14 @@ public class Board {
                 data.setTitle(rs.getString("title"));
                 data.setContent(rs.getString("content"));
                 data.setWriter(rs.getString("writer"));
-                data.setCreatedAt(rs.getTimestamp("created_at"));
-                data.setUpdatedAt(rs.getTimestamp("updated_at"));
                 data.setViewCount(rs.getInt("view_count"));
                 data.setLikeCount(rs.getInt("like_count"));
                 data.setDislikeCount(rs.getInt("dislike_count"));
-                data.setCommentCount(rs.getInt("comment_count"));
                 data.setIpAddress(rs.getString("ip_address"));
-                data.setNotice(rs.getBoolean("is_notice"));
-                data.setImage(rs.getBoolean("is_image"));
                 data.setSecret(rs.getBoolean("is_secret"));
                 data.setDeleted(rs.getBoolean("is_deleted"));
+                data.setCreatedAt(rs.getTimestamp("created_at"));
+                data.setUpdatedAt(rs.getTimestamp("updated_at"));
                 
                 return data;  // 見つかったデータを返す
             }
@@ -337,7 +330,7 @@ public class Board {
      * @param category カテゴリ
      * @param title タイトル
      * @param content 本文
-     * @param writer 投稿者名
+     * @param writer 作成者名
      * @return 成功時true、失敗時false
      * 
      * 処理内容:
@@ -348,7 +341,8 @@ public class Board {
             String content, String writer) {
         // UPDATE文の準備
         // WHERE id = ?: 指定されたIDの行のみ更新
-        String sql = "UPDATE board_data SET category = ?, title = ?, content = ?, writer = ? " +
+        String sql = "UPDATE board_data SET category = ?, title = ?, content = ?, " +
+                "writer = ?, updated_at = CURRENT_TIMESTAMP " +
                 "WHERE board_id = ? AND is_deleted = FALSE";
         /*
          * UPDATE文の構造:
@@ -369,8 +363,8 @@ public class Board {
             // 3. パラメータ設定
             pstmt.setString(1, category);  // SET category = ?
             pstmt.setString(2, title);     // SET title = ?
-            pstmt.setString(3, content);   // SET content = ?
-            pstmt.setString(4, writer);    // SET writer = ?
+            pstmt.setString(3, writer);    // SET writer = ?
+            pstmt.setString(4, content);   // SET content = ?
             pstmt.setLong(5, id);          // WHERE board_id = ?
             /*
              * パラメータの順序に注意:

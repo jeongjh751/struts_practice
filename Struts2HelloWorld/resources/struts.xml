@@ -48,10 +48,54 @@
             <result name="list" type="redirect">boardList.action</result>
         </action>
         
-        
         <!-- 削除 -->
         <action name="boardDelete" class="action.BoardAction" method="delete">
             <result name="list" type="redirect">boardList.action</result>
         </action>
+        
+        <!-- コメント関連アクション -->
+		<action name="commentAdd" class="action.CommentAction" method="add">
+		    <result name="success" type="redirectAction">
+		        <param name="actionName">boardDetail</param>
+		        <param name="boardId">${boardId}</param>
+		    </result>
+		    <result name="error" type="redirectAction">
+		        <param name="actionName">boardDetail</param>
+		        <param name="boardId">${boardId}</param>
+		    </result>
+		</action>
+		
+		<!-- コメント編集フォーム表示 -->
+		<action name="commentEditForm" class="action.CommentAction" method="editForm">
+		    <result name="edit">/WEB-INF/views/commentEdit.jsp</result>
+		    <result name="error" type="redirectAction">
+		        <param name="actionName">boardDetail</param>
+		        <param name="boardId">${boardId}</param>
+		    </result>
+		</action>
+		
+		<!-- コメント編集 -->
+		<action name="commentEditSubmit" class="action.CommentAction" method="edit">
+		    <result name="success" type="redirectAction">
+		        <param name="actionName">boardDetail</param>
+		        <param name="boardId">${boardId}</param>
+		    </result>
+		    <result name="error" type="redirectAction">
+		        <param name="actionName">boardDetail</param>
+		        <param name="boardId">${boardId}</param>
+		    </result>
+		</action>
+		
+		<!-- コメント削除 -->
+		<action name="commentDelete" class="action.CommentAction" method="delete">
+		    <result name="success" type="redirectAction">
+		        <param name="actionName">boardDetail</param>
+		        <param name="boardId">${boardId}</param>
+		    </result>
+		    <result name="error" type="redirectAction">
+		        <param name="actionName">boardDetail</param>
+		        <param name="boardId">${boardId}</param>
+		    </result>
+		</action>
     </package>
 </struts>

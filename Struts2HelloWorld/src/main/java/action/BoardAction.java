@@ -3,6 +3,9 @@ package action;
 import java.util.List;
 // リスト型を使用するためのインポート
 
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
+
 import com.opensymphony.xwork2.ActionSupport;
 // Struts2のActionSupportクラスをインポート
 // このクラスを継承することで、バリデーション、エラーメッセージ、
@@ -11,7 +14,8 @@ import com.opensymphony.xwork2.ActionSupport;
 import model.Board;
 // 掲示板データを管理するBoardクラスをインポート
 import model.BoardData;
-// 投稿データを表すBoardDataクラスをインポート
+import model.Comment;
+import model.CommentData;
 
 /**
  * 【BoardActionクラス】
@@ -49,6 +53,9 @@ public class BoardAction extends ActionSupport {
 	 * 3. 何も継承しない（POJOアクション）
 	 */
 
+	// ========== Log4j2宣言 ==========
+    private static final Logger logger = LogManager.getLogger(BoardAction.class);
+    
 	// ========== フィールド宣言 ==========
 	// これらのフィールドはStruts2によって自動的にバインドされる
 
@@ -83,7 +90,11 @@ public class BoardAction extends ActionSupport {
 	 * 4. このnameフィールドに「太郎」が設定される
 	 */
 
-
+	private String updater;
+	/*
+	 * 【更新者名を保持するフィールド】
+	 */
+	
 	private String ipAdress;
 	/*
 	 * 【投稿者のIPアドレスを保持するフィールド】
@@ -105,6 +116,17 @@ public class BoardAction extends ActionSupport {
 
 	private BoardData item; // 詳細表示用
 
+	private List<CommentData> comments;  // 댓글 목록 추가
+    
+    // getter/setter 추가
+    public List<CommentData> getComments() {
+        return comments;
+    }
+    
+    public void setComments(List<CommentData> comments) {
+        this.comments = comments;
+    }
+    
 	private static final long serialVersionUID = 1L;
 	/*
 	 * 【シリアライズバージョンUID】
@@ -151,8 +173,8 @@ public class BoardAction extends ActionSupport {
     }
 
 	/**
-	 * 投稿メッセージを取得
-	 * @return メッセージ本文
+	 * 投稿内容を取得
+	 * @return 内容本文
 	 */
 	public String getContent() {
 		return content;
@@ -176,7 +198,7 @@ public class BoardAction extends ActionSupport {
 
 	/**
 	 * 投稿者名を設定
-	 * @param name 投稿者名
+	 * @param writer 投稿者名
 	 * 
 	 * 【Struts2による自動呼び出し】
 	 * ユーザーがフォームを送信すると、Struts2が自動的に:
@@ -188,6 +210,22 @@ public class BoardAction extends ActionSupport {
 		this.writer = writer;
 	}
 
+	/**
+	 * 更新者名を取得
+	 * @return 更新者名
+	 */
+	public String getUpdater() {
+	    return updater;
+	}
+	
+	/**
+	 * 更新者名を設定
+	 * @param updater 更新者名
+	 */
+	public void setUpdater(String updater) {
+	    this.updater = updater;
+	}
+	
 	/**
 	 * IPアドレスを取得
 	 * @return IPアドレス
@@ -234,17 +272,26 @@ public class BoardAction extends ActionSupport {
 
     // 一覧表示 (リスト画面)
     public String list() {
+    	logger.debug("【一覧表示】list()メソッド開始");
         data = Board.getChatData();
+        logger.info("【一覧表示】投稿件数: " + (data != null ? data.size() : 0));
         return "list";
     }
     
     // 詳細表示
     public String detail() {
+    	logger.debug("【詳細表示】detail()メソッド開始 - boardId: " + boardId);
         item = Board.getDataById(boardId);
         if (item != null) {
             Board.incrementViewCount(boardId);  // 閲覧数+1
+            logger.info("【詳細表示】投稿表示成功 - boardId: " + boardId);
+            
+            comments = Comment.getCommentsByBoardId(boardId);
+            logger.info("【詳細表示】投稿表示成功 - コメント数: " + comments.size());
+           
             return "detail";
         } else {
+        	logger.warn("【詳細表示】投稿が見つかりませんでした - boardId: " + boardId);
             addActionError("投稿が見つかりませんでした");
             return "error";
         }
@@ -276,11 +323,16 @@ public class BoardAction extends ActionSupport {
 	 * @return 処理結果を表す文字列（"success"）
 	 */
     public String execute() {
+    	  logger.debug("【新規投稿】execute()メソッド開始");
+          logger.debug("【新規投稿】writer: " + writer + ", title: " + title);
+          
         if (isValid()) {
             boolean success = Board.addChatData(category, title, content, writer, ipAdress);
             if (success) {
+            	logger.info("【新規投稿】投稿成功 - writer: " + writer);
                 return "success";
             } else {
+            	logger.error("【新規投稿】投稿失敗 - writer: " + writer);
                 addActionError("投稿に失敗しました");
                 return "input";
             }
@@ -311,13 +363,18 @@ public class BoardAction extends ActionSupport {
 	
 	  
     public String editForm() {
+    	logger.debug("【編集フォーム】editForm()メソッド開始 - boardId: " + boardId);
         item = Board.getDataById(boardId);
         if (item != null) {
             // 既存データをフィールドに設定
+            this.category = item.getCategory();
             this.title = item.getTitle();
             this.content = item.getContent();
+            this.writer = item.getWriter();
+            logger.info("【編集フォーム】編集画面表示 - boardId: " + boardId);
             return "edit";
         } else {
+        	logger.warn("【編集フォーム】投稿が見つかりませんでした - boardId: " + boardId);
             addActionError("投稿が見つかりませんでした");
             data = Board.getChatData();
             return "list";
@@ -332,13 +389,20 @@ public class BoardAction extends ActionSupport {
      * @return "success"を返してboard.jspを表示
      */
 	public String edit() {
+		 logger.debug("【編集】edit()メソッド開始 - boardId: " + boardId);
+	       
 		if (title != null && content != null && writer != null &&
 				!title.equals("") && !content.equals("") && !writer.equals("")) {
 			boolean success = Board.updateData(boardId, category, title, content, writer);
-			if (!success) {
-				addActionError("投稿が見つかりませんでした");
-			}
+			if (success) {
+	            logger.info("【編集】更新成功 - boardId: " + boardId + 
+	                       ", 作成者: " + writer);
+	        } else {
+	            logger.error("【編集】更新失敗 - boardId: " + boardId);
+	            addActionError("投稿が見つかりませんでした");
+	        }
 		} else {
+			logger.warn("【編集】入力値エラー");
 			addActionError("すべて入力してください");
 		}
 		return "list";
@@ -352,10 +416,13 @@ public class BoardAction extends ActionSupport {
      * @return "success"を返してboard.jspを表示
      */
 	public String delete() {
-		boolean success = Board.deleteData(boardId);
+		logger.debug("【削除】delete()メソッド開始 - boardId: " + boardId);
+   		boolean success = Board.deleteData(boardId);
 		if (!success) {
+			logger.error("【削除】削除失敗 - boardId: " + boardId);
 			addActionError("投稿が見つかりませんでした");
 		}
+		logger.info("【削除】削除成功 - boardId: " + boardId);
 		return "list";
 	}
 
@@ -381,6 +448,7 @@ public class BoardAction extends ActionSupport {
 		 */
 
 		if (title == null || title.equals("")) {
+			logger.debug("【バリデーション】タイトル未入力");
             addActionError("タイトルを入力してください");
         }
 		
@@ -396,7 +464,7 @@ public class BoardAction extends ActionSupport {
 			 *     // isEmpty()はJava 6以降で使用可能
 			 * }
 			 */
-
+			logger.warn("【バリデーション】名前未入力");
 			addActionError("名前を入力してください");
 			/*
 			 * 【addActionError()メソッド】
@@ -416,8 +484,8 @@ public class BoardAction extends ActionSupport {
 			 * 【内容の必須チェック】
 			 * 名前と同じロジック
 			 */
-
-			addActionError("メッセージを入力してください");
+			logger.error("【バリデーション】内容未入力");
+			addActionError("内容を入力してください");
 		}
 
 		return !hasActionErrors();
