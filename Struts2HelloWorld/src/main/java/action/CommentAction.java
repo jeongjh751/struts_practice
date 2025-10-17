@@ -126,7 +126,7 @@ public class CommentAction extends ActionSupport {
         
         // バリデーション
         if (!isValidForAdd()) {
-            logger.warn("【コメント追加】バリデーションエラー");
+            logger.error("【コメント追加】バリデーションエラー");
             return "error";
         }
         

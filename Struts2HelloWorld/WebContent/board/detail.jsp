@@ -201,10 +201,25 @@
     .edit-form .cancel-btn:hover {
         background-color: #777;
     }
+    /* ファイル関連のスタイル */
+    .file-attachment {
+        background-color: #f0f8ff;
+        border: 1px solid #b3d9ff;
+        border-radius: 5px;
+        padding: 10px;
+    }
+    .file-attachment a {
+        color: #0066cc;
+        text-decoration: none;
+        font-weight: bold;
+    }
+    .file-attachment a:hover {
+        text-decoration: underline;
+    }
 </style>
 <script>
     // 返信フォーム表示/非表示
-    function toggleReplyForm(commentId) {
+    function commentReplyForm(commentId) {
         var form = document.getElementById('reply-form-' + commentId);
         if (form.classList.contains('active')) {
             form.classList.remove('active');
@@ -216,7 +231,7 @@
     }
     
     // 編集フォーム表示/非表示
-    function toggleEditForm(commentId) {
+    function commentEditForm(commentId) {
         var form = document.getElementById('edit-form-' + commentId);
         var content = document.getElementById('comment-content-' + commentId);
         
@@ -312,6 +327,22 @@
             <pre><s:property value="item.content"/></pre>
         </td>
     </tr>
+    <s:if test="item.hasFile()">
+		<tr>
+		    <th>添付ファイル</th>
+		    <td>
+		        <div class="file-attachment">
+		            📎 
+		            <a href="boardFileDownload.action?boardId=<s:property value='item.boardId'/>">
+		                <s:property value="item.fileName"/>
+		            </a>
+		            <span style="color: #666; margin-left: 10px;">
+		                (<s:property value="item.formattedFileSize"/>)
+		            </span>
+		        </div>
+		    </td>
+		</tr>
+	</s:if>
 </table>
 
 <hr/>
@@ -385,7 +416,7 @@
                             <s:textarea name="content" value="%{#comment.content}" rows="4" required="true"/>
                             <button type="submit">更新</button>
                             <button type="button" class="cancel-btn" 
-                                    onclick="toggleEditForm(<s:property value='#comment.commentId'/>)">
+                                    onclick="commentEditForm(<s:property value='#comment.commentId'/>)">
                                 キャンセル
                             </button>
                         </s:form>
@@ -395,12 +426,12 @@
                     <div class="comment-actions">
                         <s:if test="#comment.parentCommentId == null">
                             <a href="javascript:void(0)" 
-                               onclick="toggleReplyForm(<s:property value='#comment.commentId'/>)">
+                               onclick="commentReplyForm(<s:property value='#comment.commentId'/>)">
                                 返信
                             </a>
                         </s:if>
                         <a href="javascript:void(0)"
-                           onclick="toggleEditForm(<s:property value='#comment.commentId'/>)">
+                           onclick="commentEditForm(<s:property value='#comment.commentId'/>)">
                             編集
                         </a>
                         <a href="commentDelete.action?commentId=<s:property value='#comment.commentId'/>&boardId=<s:property value='item.boardId'/>" 
@@ -424,7 +455,7 @@
                                            rows="3" required="true"/>
                                 <button type="submit">返信投稿</button>
                                 <button type="button" class="cancel-btn" 
-                                        onclick="toggleReplyForm(<s:property value='#comment.commentId'/>)">
+                                        onclick="commentReplyForm(<s:property value='#comment.commentId'/>)">
                                     キャンセル
                                 </button>
                             </s:form>

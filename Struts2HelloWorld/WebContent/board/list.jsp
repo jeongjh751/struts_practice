@@ -39,6 +39,43 @@
     <a href="boardList.action?category=質問">[質問]</a>
     <a href="boardList.action?category=設問">[設問]</a>
 </p>
+<!-- 検索フォーム追加 -->
+<div class="search-form">
+    <form action="boardList.action" method="get">
+        <!-- 現在のカテゴリを維持 -->
+        <s:if test="category != null && category != ''">
+            <input type="hidden" name="category" value="<s:property value='category'/>"/>
+        </s:if>
+        
+        <label for="searchKeyword">タイトル検索:</label>
+        <input type="text" 
+               id="searchKeyword" 
+               name="searchKeyword" 
+               value="<s:property value='searchKeyword'/>" 
+               placeholder="検索キーワードを入力"/>
+        <button type="submit">検索</button>
+        
+        <!-- リセットボタン：カテゴリのみ保持 -->
+        <s:if test="category != null && category != ''">
+            <a href="boardList.action?category=<s:property value='category'/>">
+                <button type="button">リセット</button>
+            </a>
+        </s:if>
+        <s:else>
+            <a href="boardList.action">
+                <button type="button">リセット</button>
+            </a>
+        </s:else>
+    </form>
+    
+    <!-- 検索結果表示 -->
+    <s:if test="searchKeyword != null && searchKeyword != ''">
+        <p style="margin-top: 10px; color: #666;">
+            「<strong><s:property value="searchKeyword"/></strong>」の検索結果: 
+            <strong><s:property value="data.size()"/></strong>件
+        </p>
+    </s:if>
+</div>
 <hr/>
 <!-- エラーメッセージ表示 -->
 <s:actionerror/>
@@ -106,9 +143,9 @@ if(stack!=null && stack.findValue("data")==null){
         <td>
             <s:property value="likeCount"/>
         </td>
-        <!-- コメント数 -->
+        <!-- よくない数 -->
         <td>
-            <s:property value="commentCount"/>
+            <s:property value="dislikeCount"/>
         </td>
         <!-- 操作ボタン -->
         <td>

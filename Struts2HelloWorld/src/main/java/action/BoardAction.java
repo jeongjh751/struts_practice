@@ -1,7 +1,9 @@
 package action;
 
+import java.io.File;
 import java.util.List;
 // リスト型を使用するためのインポート
+import java.util.UUID;
 
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -116,17 +118,24 @@ public class BoardAction extends ActionSupport {
 
 	private BoardData item; // 詳細表示用
 
-	private List<CommentData> comments;  // 댓글 목록 추가
+	private List<CommentData> comments; // コメントリスト
     
-    // getter/setter 추가
-    public List<CommentData> getComments() {
-        return comments;
-    }
-    
-    public void setComments(List<CommentData> comments) {
-        this.comments = comments;
-    }
-    
+	private String searchKeyword; // 検索キーワード
+	
+    private File upload; // アップロードされたファイル
+    private String uploadContentType; // ファイルのContentタイプ
+    private String uploadFileName; // ファイル名
+    private static final String UPLOAD_DIR = "/uploads";
+    private static final long MAX_FILE_SIZE = 10 * 1024 * 1024;  // 10MB
+    private static final String[] ALLOWED_TYPES = {
+        "image/jpeg", "image/png", "image/gif", 
+        "application/pdf", 
+        "application/msword",
+        "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+        "application/vnd.ms-excel",
+        "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        "text/plain"
+    };
 	private static final long serialVersionUID = 1L;
 	/*
 	 * 【シリアライズバージョンUID】
@@ -268,19 +277,104 @@ public class BoardAction extends ActionSupport {
     public void setItem(BoardData item) {
         this.item = item;
     }
+    
+    public List<CommentData> getComments() {
+        return comments;
+    }
+    
+    public void setComments(List<CommentData> comments) {
+        this.comments = comments;
+    }
+    
+    public String getSearchKeyword() {
+        return searchKeyword;
+    }
+    
+    public void setSearchKeyword(String searchKeyword) {
+        this.searchKeyword = searchKeyword;
+    }
+    
+    public File getUpload() {
+        return upload;
+    }
+    
+    public void setUpload(File upload) {
+        this.upload = upload;
+    }
+    
+    public String getUploadContentType() {
+        return uploadContentType;
+    }
+    
+    public void setUploadContentType(String uploadContentType) {
+        this.uploadContentType = uploadContentType;
+    }
+    
+    public String getUploadFileName() {
+        return uploadFileName;
+    }
+    
+    public void setUploadFileName(String uploadFileName) {
+        this.uploadFileName = uploadFileName;
+    }
+    
 	// ========== Actionメソッド ==========
 
     // 一覧表示 (リスト画面)
     public String list() {
-    	logger.debug("【一覧表示】list()メソッド開始");
-        data = Board.getChatData();
-        logger.info("【一覧表示】投稿件数: " + (data != null ? data.size() : 0));
+        logger.info("【一覧表示】list()メソッド開始");
+        
+        try {
+            // 全体データを取得
+            data = Board.getChatData();
+            
+            if (data == null) {
+                logger.warn("【一覧表示】データが取得できませんでした");
+                data = new java.util.ArrayList<>();
+                return "list";
+            }
+            
+            // カテゴリフィルタリング
+            if (category != null && !category.trim().isEmpty()) {
+                logger.debug("【一覧表示】カテゴリフィルタ適用: " + category);
+                List<BoardData> filteredData = new java.util.ArrayList<>();
+                for (BoardData board : data) {
+                    if (board != null && category.equals(board.getCategory())) {
+                        filteredData.add(board);
+                    }
+                }
+                data = filteredData;
+            }
+            
+            // タイトル検索フィルタリング
+            if (searchKeyword != null && !searchKeyword.trim().isEmpty()) {
+                logger.debug("【一覧表示】検索キーワード適用: " + searchKeyword);
+                List<BoardData> searchedData = new java.util.ArrayList<>();
+                String keyword = searchKeyword.trim().toLowerCase();
+                for (BoardData board : data) {
+                    if (board != null && board.getTitle() != null && 
+                        board.getTitle().toLowerCase().contains(keyword)) {
+                        searchedData.add(board);
+                    }
+                }
+                data = searchedData;
+                logger.info("【一覧表示】検索結果: " + data.size() + "件");
+            }
+            
+            logger.info("【一覧表示】投稿件数: " + data.size());
+            
+        } catch (Exception e) {
+            logger.error("【一覧表示】エラー発生: " + e.getMessage(), e);
+            addActionError("データの取得に失敗しました");
+            data = new java.util.ArrayList<>();
+        }
+        
         return "list";
     }
     
     // 詳細表示
     public String detail() {
-    	logger.debug("【詳細表示】detail()メソッド開始 - boardId: " + boardId);
+    	logger.info("【詳細表示】detail()メソッド開始 - boardId: " + boardId);
         item = Board.getDataById(boardId);
         if (item != null) {
             Board.incrementViewCount(boardId);  // 閲覧数+1
@@ -291,7 +385,7 @@ public class BoardAction extends ActionSupport {
            
             return "detail";
         } else {
-        	logger.warn("【詳細表示】投稿が見つかりませんでした - boardId: " + boardId);
+        	logger.error("【詳細表示】投稿が見つかりませんでした - boardId: " + boardId);
             addActionError("投稿が見つかりませんでした");
             return "error";
         }
@@ -323,19 +417,51 @@ public class BoardAction extends ActionSupport {
 	 * @return 処理結果を表す文字列（"success"）
 	 */
     public String execute() {
-    	  logger.debug("【新規投稿】execute()メソッド開始");
+    	  logger.info("【新規投稿】execute()メソッド開始");
           logger.debug("【新規投稿】writer: " + writer + ", title: " + title);
           
-        if (isValid()) {
-            boolean success = Board.addChatData(category, title, content, writer, ipAdress);
-            if (success) {
-            	logger.info("【新規投稿】投稿成功 - writer: " + writer);
-                return "success";
-            } else {
-            	logger.error("【新規投稿】投稿失敗 - writer: " + writer);
-                addActionError("投稿に失敗しました");
-                return "input";
-            }
+          if (isValid()) {
+              // ファイル処理
+              String savedFileName = null;
+              String savedFilePath = null;
+              long fileSize = 0;
+              
+              if (upload != null) {
+                  logger.info("【新規投稿】ファイルアップロード: " + uploadFileName);
+                  
+                  // ファイルバリデーション
+                  if (!validateFile()) {
+                      return "input";
+                  }
+                  
+                  // ファイル保存
+                  try {
+                      String uploadPath = getUploadPath();
+                      savedFileName = uploadFileName;
+                      savedFilePath = saveFile(uploadPath);
+                      fileSize = upload.length();
+                      logger.info("【新規投稿】ファイル保存成功: " + savedFileName);
+                  } catch (Exception e) {
+                      logger.error("【新規投稿】ファイル保存失敗: " + e.getMessage(), e);
+                      addActionError("ファイルのアップロードに失敗しました");
+                      return "input";
+                  }
+              }
+              
+              // 投稿データ保存
+              boolean success = Board.addChatData(
+                  category, title, content, writer, ipAdress,
+                  savedFileName, savedFilePath, fileSize
+              );
+              
+              if (success) {
+                  logger.info("【新規投稿】投稿成功 - writer: " + writer);
+                  return "success";
+              } else {
+                  logger.error("【新規投稿】投稿失敗 - writer: " + writer);
+                  addActionError("投稿に失敗しました");
+                  return "input";
+              }
         } else {
             return "input";
         }
@@ -363,7 +489,7 @@ public class BoardAction extends ActionSupport {
 	
 	  
     public String editForm() {
-    	logger.debug("【編集フォーム】editForm()メソッド開始 - boardId: " + boardId);
+    	logger.info("【編集フォーム】editForm()メソッド開始 - boardId: " + boardId);
         item = Board.getDataById(boardId);
         if (item != null) {
             // 既存データをフィールドに設定
@@ -374,7 +500,7 @@ public class BoardAction extends ActionSupport {
             logger.info("【編集フォーム】編集画面表示 - boardId: " + boardId);
             return "edit";
         } else {
-        	logger.warn("【編集フォーム】投稿が見つかりませんでした - boardId: " + boardId);
+        	logger.error("【編集フォーム】投稿が見つかりませんでした - boardId: " + boardId);
             addActionError("投稿が見つかりませんでした");
             data = Board.getChatData();
             return "list";
@@ -389,23 +515,56 @@ public class BoardAction extends ActionSupport {
      * @return "success"を返してboard.jspを表示
      */
 	public String edit() {
-		 logger.debug("【編集】edit()メソッド開始 - boardId: " + boardId);
+		 logger.info("【編集】edit()メソッド開始 - boardId: " + boardId);
 	       
 		if (title != null && content != null && writer != null &&
 				!title.equals("") && !content.equals("") && !writer.equals("")) {
-			boolean success = Board.updateData(boardId, category, title, content, writer);
+			
+	        String savedFileName = null;
+	        String savedFilePath = null;
+	        long fileSize = 0;
+	        
+	        if (upload != null) {
+	        	logger.info("【編集】ファイルアップロード: " + uploadFileName);
+	            
+	            // ファイルバリデーション
+	            if (!validateFile()) {
+	                data = Board.getChatData();
+	                return "list";
+	            }
+	            
+	            // ファイル保存
+	            try {
+	                String uploadPath = getUploadPath();
+	                savedFileName = uploadFileName;
+	                savedFilePath = saveFile(uploadPath);
+	                fileSize = upload.length();
+	                logger.info("【編集】ファイル保存成功: " + savedFileName);
+	            } catch (Exception e) {
+	                logger.error("【編集】ファイル保存失敗: " + e.getMessage(), e);
+	                addActionError("ファイルのアップロードに失敗しました");
+	                data = Board.getChatData();
+	                return "list";
+	            }
+	        }
+	        
+	        boolean success = Board.updateData(
+	                boardId, category, title, content, writer,
+	                savedFileName, savedFilePath, fileSize);
+
 			if (success) {
-	            logger.info("【編集】更新成功 - boardId: " + boardId + 
+	            logger.debug("【編集】更新成功 - boardId: " + boardId + 
 	                       ", 作成者: " + writer);
 	        } else {
 	            logger.error("【編集】更新失敗 - boardId: " + boardId);
 	            addActionError("投稿が見つかりませんでした");
 	        }
 		} else {
-			logger.warn("【編集】入力値エラー");
+			logger.error("【編集】入力値エラー");
 			addActionError("すべて入力してください");
 		}
-		return "list";
+	    data = Board.getChatData();
+	    return "list";
 	}
 
     /**
@@ -416,7 +575,7 @@ public class BoardAction extends ActionSupport {
      * @return "success"を返してboard.jspを表示
      */
 	public String delete() {
-		logger.debug("【削除】delete()メソッド開始 - boardId: " + boardId);
+		logger.info("【削除】delete()メソッド開始 - boardId: " + boardId);
    		boolean success = Board.deleteData(boardId);
 		if (!success) {
 			logger.error("【削除】削除失敗 - boardId: " + boardId);
@@ -448,7 +607,7 @@ public class BoardAction extends ActionSupport {
 		 */
 
 		if (title == null || title.equals("")) {
-			logger.debug("【バリデーション】タイトル未入力");
+			logger.error("【バリデーション】タイトル未入力");
             addActionError("タイトルを入力してください");
         }
 		
@@ -464,7 +623,7 @@ public class BoardAction extends ActionSupport {
 			 *     // isEmpty()はJava 6以降で使用可能
 			 * }
 			 */
-			logger.warn("【バリデーション】名前未入力");
+			logger.error("【バリデーション】名前未入力");
 			addActionError("名前を入力してください");
 			/*
 			 * 【addActionError()メソッド】
@@ -507,4 +666,122 @@ public class BoardAction extends ActionSupport {
 		 * 4. execute()メソッドでif(isValid())として判定
 		 */
 	}
+	
+	private boolean validateFile() {
+        // ファイルサイズチェック
+        if (upload.length() > MAX_FILE_SIZE) {
+            addActionError("ファイルサイズが大きすぎます（最大10MB）");
+            logger.warn("【ファイル検証】サイズ超過: " + upload.length() + " bytes");
+            return false;
+        }
+        
+        // ファイル形式チェック
+        boolean isAllowed = false;
+        for (String allowedType : ALLOWED_TYPES) {
+            if (uploadContentType.equals(allowedType)) {
+                isAllowed = true;
+                break;
+            }
+        }
+        
+        if (!isAllowed) {
+            addActionError("許可されていないファイル形式です");
+            logger.warn("【ファイル検証】不正な形式: " + uploadContentType);
+            return false;
+        }
+        
+        return true;
+    }
+    
+    /**
+     * アップロードディレクトリのパスを取得
+     */
+    private String getUploadPath() {
+        // Servlet Contextを通じて実際のパスを取得
+        String realPath = org.apache.struts2.ServletActionContext.getServletContext()
+            .getRealPath(UPLOAD_DIR);
+        
+        File uploadDir = new File(realPath);
+        if (!uploadDir.exists()) {
+            uploadDir.mkdirs();
+            logger.info("【ファイル保存】ディレクトリ作成: " + realPath);
+        }
+        
+        return realPath;
+    }
+    
+    /**
+     * ファイルを保存
+     * @param uploadPath 保存先ディレクトリ
+     * @return 保存されたファイルのパス
+     */
+    private String saveFile(String uploadPath) throws Exception {
+        // 固有のファイル名生成(UUID+オリジナルファイル名)
+        String uniqueFileName = UUID.randomUUID().toString() + "_" + uploadFileName;
+        File destFile = new File(uploadPath, uniqueFileName);
+        
+        // ファイルコピー
+        org.apache.commons.io.FileUtils.copyFile(upload, destFile);
+        
+        logger.info("【ファイル保存】保存完了: " + destFile.getAbsolutePath());
+        return UPLOAD_DIR + "/" + uniqueFileName;
+    }
+    
+    public String download() {
+        logger.info("【ファイルダウンロード】boardId: " + boardId);
+        
+        try {
+            // 掲示板情報照会
+            item = Board.getDataById(boardId);
+            
+            if (item == null || !item.hasFile()) {
+                addActionError("ファイルが見つかりません");
+                return "error";
+            }
+            
+            // ファイルパス
+            String realPath = org.apache.struts2.ServletActionContext.getServletContext()
+                .getRealPath(item.getFilePath());
+            
+            File file = new File(realPath);
+            
+            if (!file.exists()) {
+                addActionError("ファイルが存在しません");
+                return "error";
+            }
+            
+            // ダウンロード処理
+            javax.servlet.http.HttpServletResponse response = 
+                org.apache.struts2.ServletActionContext.getResponse();
+            
+            response.setContentType("application/octet-stream");
+            response.setContentLength((int) file.length());
+            response.setHeader("Content-Disposition", 
+                "attachment; filename=\"" + 
+                java.net.URLEncoder.encode(item.getFileName(), "UTF-8").replaceAll("\\+", "%20") + 
+                "\"");
+            
+            // ファイル転送
+            java.io.FileInputStream fis = new java.io.FileInputStream(file);
+            java.io.OutputStream os = response.getOutputStream();
+            
+            byte[] buffer = new byte[4096];
+            int bytesRead;
+            while ((bytesRead = fis.read(buffer)) != -1) {
+                os.write(buffer, 0, bytesRead);
+            }
+            
+            fis.close();
+            os.flush();
+            
+            logger.info("【ファイルダウンロード】成功: " + item.getFileName());
+            return null; // nullを返すとビューをレンダリングしない
+            
+        } catch (Exception e) {
+            logger.error("【ファイルダウンロード】エラー", e);
+            addActionError("ダウンロードに失敗しました");
+            return "error";
+        }
+    }
+
 }

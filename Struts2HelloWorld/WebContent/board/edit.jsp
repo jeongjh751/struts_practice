@@ -21,6 +21,21 @@
     td {
         padding: 8px;
     }
+    .current-file {
+    background-color: #e3f2fd;
+    padding: 10px;
+    border-radius: 4px;
+    margin-bottom: 10px;
+    font-size: 0.9em;
+	}
+	.file-info {
+	    font-size: 0.9em;
+	    color: #666;
+	    margin-top: 5px;
+	}
+	input[type="file"] {
+	    padding: 5px;
+	}
 </style>
 </head>
 <body>
@@ -33,7 +48,7 @@
 
 <!-- エラーメッセージ表示 -->
 <s:actionerror/>
-<s:form action="boardEdit" method="post">
+<s:form action="boardEdit" method="post" enctype="multipart/form-data">
     <s:hidden name="boardId" value="%{item.boardId}"/>
     <table>
         <tr>
@@ -68,7 +83,28 @@
                 <s:textarea name="content" rows="10" cols="60" value="%{item.content}"/>
             </td>
         </tr>
-        
+        <tr>
+        <th>ファイル:</th>
+        <td>
+            <!--既存ファイルが存在する場合表示 -->
+            <s:if test="item.hasFile()">
+                <div class="current-file">
+                    📎 現在のファイル: 
+                    <strong><s:property value="item.fileName"/></strong>
+                    (<s:property value="item.formattedFileSize"/>)
+                    <br>
+                    <small>※ 新しいファイルを選択すると置き換えられます</small>
+                </div>
+            </s:if>
+            
+            <s:file name="upload" 
+                    accept="image/*,.pdf,.doc,.docx,.xls,.xlsx,.txt"/>
+            <div class="file-info">
+                ※ 最大10MB、画像・PDF・Word・Excel・テキストファイル対応
+            </div>
+        </td>
+	    </tr>
+	        
         <!-- ボタン -->
         <tr>
             <td colspan="2">

@@ -21,6 +21,14 @@
     td {
         padding: 8px;
     }
+    .file-info {
+    font-size: 0.9em;
+    color: #666;
+    margin-top: 5px;
+	}
+	input[type="file"] {
+	    padding: 5px;
+	}
 </style>
 </head>
 <body>
@@ -32,7 +40,7 @@
 
 <s:actionerror/>
 
-<s:form action="boardCreate" method="post">
+<s:form action="boardCreate" method="post" enctype="multipart/form-data">
     <%
     // IPアドレス取得
     String ipAddress = request.getRemoteAddr();
@@ -65,6 +73,16 @@
         <tr>
             <th>本文:</th>
             <td><s:textarea name="content" rows="10" cols="60"/></td>
+        </tr>
+         <tr>
+        <th>ファイル:</th>
+        <td>
+            <s:file name="upload" 
+                    accept="image/*,.pdf,.doc,.docx,.xls,.xlsx,.txt"/>
+            <div class="file-info">
+                ※ 最大10MB、画像・PDF・Word・Excel・テキストファイル対応
+            </div>
+        </td>
         </tr>
         <tr>
             <td colspan="2">

@@ -81,6 +81,10 @@ public class BoardData {
      * - 統計データの保持
      */
 	
+    private String fileName; // 元ファイル名
+    private String filePath; // サーバーに保存されたファイルパス
+    private long fileSize; // ファイルサイズ(bytes)
+    
     private Timestamp createdAt;
     // 投稿日時を保存するフィールド
     // 形式: "yyyy/MM/dd HH:mm:ss" （例: "2025/10/09 16:46:48"）
@@ -191,6 +195,30 @@ public class BoardData {
      */
     public boolean isDeleted() {
         return isDeleted;
+    }
+    
+    /**
+     * ファイル名を取得
+     * @return ファイル名
+     */
+    public String getFileName() {
+        return fileName;
+    }
+    
+    /**
+     * ファイルパスを取得
+     * @return ファイルパス
+     */
+    public String getFilePath() {
+        return filePath;
+    }
+    
+    /**
+     * ファイルサイズを取得
+     * @return ファイルサイズ
+     */
+    public Long getFileSize() {
+        return fileSize;
     }
     
     /**
@@ -325,6 +353,46 @@ public class BoardData {
      */
     public void setDeleted(boolean isDeleted) {
         this.isDeleted = isDeleted;
+    }
+    
+    /**
+     * ファイル名を設定
+     * @param fileName 設定するファイル名
+     */
+    public void setFileName(String fileName) {
+        this.fileName = fileName;
+    }
+    
+    /**
+     * ファイルパスを設定
+     * @param filePath 設定するファイルパス
+     */
+    public void setFilePath(String filePath) {
+        this.filePath = filePath;
+    }
+    
+    /**
+     * ファイルサイズを設定
+     * @param fileSize 設定するファイルサイズ
+     */
+    public void setFileSize(long fileSize) {
+        this.fileSize = fileSize;
+    }
+    
+    // ファイルサイズを読みやすい形式で返す
+    public String getFormattedFileSize() {
+        if (fileSize == 0) 
+        	return "";
+        if (fileSize < 1024) 
+        	return fileSize + " B";
+        if (fileSize < 1024 * 1024) 
+        	return String.format("%.1f KB", fileSize / 1024.0);
+        	return String.format("%.1f MB", fileSize / (1024.0 * 1024.0));
+    }
+    
+    // ファイルが添付されていることを確認
+    public boolean hasFile() {
+        return fileName != null && !fileName.isEmpty();
     }
     
     /**

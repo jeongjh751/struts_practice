@@ -13,7 +13,11 @@
 
 <struts>
     <!-- 開発モード：エラー詳細表示、自動リロード有効 -->
-    <constant name="struts.devMode" value="true" />    
+    <constant name="struts.devMode" value="true" /> 
+    <!-- 最大ファイルサイズ: 10MB -->
+    <constant name="struts.multipart.maxSize" value="10485760" />
+    <!-- 一時保存ディレクトリ -->
+    <constant name="struts.multipart.saveDir" value="/tmp" />
 	<package name="default" extends="struts-default">
          <!-- 一覧表示 (トップページ) -->
         <action name="boardList" class="action.BoardAction" method="list">
@@ -96,6 +100,10 @@
 		        <param name="actionName">boardDetail</param>
 		        <param name="boardId">${boardId}</param>
 		    </result>
+		</action>
+		
+		<action name="boardFileDownload" class="action.BoardAction" method="download">
+		    <result name="error">/WEB-INF/view/board/error.jsp</result>
 		</action>
     </package>
 </struts>
