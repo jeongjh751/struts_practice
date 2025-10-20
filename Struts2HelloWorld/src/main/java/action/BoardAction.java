@@ -1,23 +1,24 @@
 package action;
 
 import java.io.File;
+import java.io.FileInputStream;
+import java.io.InputStream;
 import java.util.List;
-// リスト型を使用するためのインポート
-import java.util.UUID;
 
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
+import org.apache.struts2.ServletActionContext;
 
 import com.opensymphony.xwork2.ActionSupport;
-// Struts2のActionSupportクラスをインポート
-// このクラスを継承することで、バリデーション、エラーメッセージ、
-// 国際化などの機能が簡単に使える
 
-import model.Board;
+import dao.BoardDao;
+import dao.CommentDao;
 // 掲示板データを管理するBoardクラスをインポート
 import model.BoardData;
-import model.Comment;
 import model.CommentData;
+import model.FileInfo;
+import service.BoardService;
+import service.FileService;
 
 /**
  * 【BoardActionクラス】
@@ -60,7 +61,10 @@ public class BoardAction extends ActionSupport {
     
 	// ========== フィールド宣言 ==========
 	// これらのフィールドはStruts2によって自動的にバインドされる
-
+    
+    private BoardService boardService = new BoardService();  
+    private FileService fileService = FileService.getInstance();
+    
 	private long boardId; // 編集/削除対象のID
     /*
      * 1. 編集・削除する投稿のIDを受け取るためのフィールド
@@ -121,21 +125,14 @@ public class BoardAction extends ActionSupport {
 	private List<CommentData> comments; // コメントリスト
     
 	private String searchKeyword; // 検索キーワード
-	
+
     private File upload; // アップロードされたファイル
     private String uploadContentType; // ファイルのContentタイプ
     private String uploadFileName; // ファイル名
-    private static final String UPLOAD_DIR = "/uploads";
-    private static final long MAX_FILE_SIZE = 10 * 1024 * 1024;  // 10MB
-    private static final String[] ALLOWED_TYPES = {
-        "image/jpeg", "image/png", "image/gif", 
-        "application/pdf", 
-        "application/msword",
-        "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-        "application/vnd.ms-excel",
-        "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-        "text/plain"
-    };
+    
+    private String fileName;
+    private InputStream inputStream;
+
 	private static final long serialVersionUID = 1L;
 	/*
 	 * 【シリアライズバージョンUID】
@@ -318,6 +315,14 @@ public class BoardAction extends ActionSupport {
         this.uploadFileName = uploadFileName;
     }
     
+    public InputStream getInputStream() {
+        return inputStream;
+    }
+
+    public String getFileName() {
+        return fileName;
+    }
+    
 	// ========== Actionメソッド ==========
 
     // 一覧表示 (リスト画面)
@@ -325,67 +330,33 @@ public class BoardAction extends ActionSupport {
         logger.info("【一覧表示】list()メソッド開始");
         
         try {
-            // 全体データを取得
-            data = Board.getChatData();
+            data = boardService.getBoardList(category, searchKeyword);
             
-            if (data == null) {
-                logger.warn("【一覧表示】データが取得できませんでした");
-                data = new java.util.ArrayList<>();
-                return "list";
-            }
-            
-            // カテゴリフィルタリング
-            if (category != null && !category.trim().isEmpty()) {
-                logger.debug("【一覧表示】カテゴリフィルタ適用: " + category);
-                List<BoardData> filteredData = new java.util.ArrayList<>();
-                for (BoardData board : data) {
-                    if (board != null && category.equals(board.getCategory())) {
-                        filteredData.add(board);
-                    }
-                }
-                data = filteredData;
-            }
-            
-            // タイトル検索フィルタリング
-            if (searchKeyword != null && !searchKeyword.trim().isEmpty()) {
-                logger.debug("【一覧表示】検索キーワード適用: " + searchKeyword);
-                List<BoardData> searchedData = new java.util.ArrayList<>();
-                String keyword = searchKeyword.trim().toLowerCase();
-                for (BoardData board : data) {
-                    if (board != null && board.getTitle() != null && 
-                        board.getTitle().toLowerCase().contains(keyword)) {
-                        searchedData.add(board);
-                    }
-                }
-                data = searchedData;
-                logger.info("【一覧表示】検索結果: " + data.size() + "件");
-            }
-            
-            logger.info("【一覧表示】投稿件数: " + data.size());
+            logger.debug("【一覧表示】投稿件数: " + data.size());
             
         } catch (Exception e) {
             logger.error("【一覧表示】エラー発生: " + e.getMessage(), e);
             addActionError("データの取得に失敗しました");
-            data = new java.util.ArrayList<>();
         }
         
         return "list";
     }
-    
-    // 詳細表示
+
+    /**
+     * 
+     * @return
+     */
     public String detail() {
-    	logger.info("【詳細表示】detail()メソッド開始 - boardId: " + boardId);
-        item = Board.getDataById(boardId);
+        logger.info("【詳細表示】detail()メソッド開始 - boardId: " + boardId);
+        
+        item = boardService.getBoardDetail(boardId);
+        
         if (item != null) {
-            Board.incrementViewCount(boardId);  // 閲覧数+1
-            logger.info("【詳細表示】投稿表示成功 - boardId: " + boardId);
-            
-            comments = Comment.getCommentsByBoardId(boardId);
-            logger.info("【詳細表示】投稿表示成功 - コメント数: " + comments.size());
-           
+            // コメント取得
+            comments = CommentDao.getCommentsByBoardId(boardId);
+            logger.debug("【詳細表示】投稿表示成功 - コメント数: " + comments.size());
             return "detail";
         } else {
-        	logger.error("【詳細表示】投稿が見つかりませんでした - boardId: " + boardId);
             addActionError("投稿が見つかりませんでした");
             return "error";
         }
@@ -417,56 +388,55 @@ public class BoardAction extends ActionSupport {
 	 * @return 処理結果を表す文字列（"success"）
 	 */
     public String execute() {
-    	  logger.info("【新規投稿】execute()メソッド開始");
-          logger.debug("【新規投稿】writer: " + writer + ", title: " + title);
-          
-          if (isValid()) {
-              // ファイル処理
-              String savedFileName = null;
-              String savedFilePath = null;
-              long fileSize = 0;
-              
-              if (upload != null) {
-                  logger.info("【新規投稿】ファイルアップロード: " + uploadFileName);
-                  
-                  // ファイルバリデーション
-                  if (!validateFile()) {
-                      return "input";
-                  }
-                  
-                  // ファイル保存
-                  try {
-                      String uploadPath = getUploadPath();
-                      savedFileName = uploadFileName;
-                      savedFilePath = saveFile(uploadPath);
-                      fileSize = upload.length();
-                      logger.info("【新規投稿】ファイル保存成功: " + savedFileName);
-                  } catch (Exception e) {
-                      logger.error("【新規投稿】ファイル保存失敗: " + e.getMessage(), e);
-                      addActionError("ファイルのアップロードに失敗しました");
-                      return "input";
-                  }
-              }
-              
-              // 投稿データ保存
-              boolean success = Board.addChatData(
-                  category, title, content, writer, ipAdress,
-                  savedFileName, savedFilePath, fileSize
-              );
-              
-              if (success) {
-                  logger.info("【新規投稿】投稿成功 - writer: " + writer);
-                  return "success";
-              } else {
-                  logger.error("【新規投稿】投稿失敗 - writer: " + writer);
-                  addActionError("投稿に失敗しました");
-                  return "input";
-              }
+        logger.info("【新規投稿】execute()メソッド開始");
+        logger.debug("【新規投稿】writer: " + writer + ", title: " + title);
+        
+        if (isValid()) {
+            // ファイル処理
+        	FileInfo fileInfo = null;
+
+        	if (upload != null) {
+                logger.debug("【新規投稿】ファイルアップロード: " + uploadFileName);
+                
+                try {
+                    // FileServiceでファイル処理を委任
+                    fileInfo = fileService.uploadFile(upload, uploadContentType, uploadFileName);
+                    logger.debug("【新規投稿】ファイル保存成功: " + fileInfo.getFileName());
+                    
+                } catch (Exception e) {
+                    logger.error("【新規投稿】ファイル保存失敗: " + e.getMessage(), e);
+                    addActionError(e.getMessage());
+                    return "input";
+                }
+            }
+        	
+            // 投稿データ保存
+        	boolean success;
+            if (fileInfo != null) {
+                success = boardService.createBoard(
+                    category, title, content, writer, ipAdress,
+                    fileInfo.getFileName(), fileInfo.getFilePath(), fileInfo.getFileSize()
+                );
+            } else {
+                success = boardService.createBoard(
+                    category, title, content, writer, ipAdress
+                );
+            }
+            
+            if (success) {
+                logger.debug("【新規投稿】投稿成功 - writer: " + writer);
+                return "success";
+            } else {
+                logger.error("【新規投稿】投稿失敗 - writer: " + writer);
+                addActionError("投稿に失敗しました");
+                return "input";
+            }
         } else {
             return "input";
         }
+
     }
-	
+
 	/**
 	 * 【updateメソッド - 更新専用のアクションメソッド】
 	 * 
@@ -486,26 +456,27 @@ public class BoardAction extends ActionSupport {
 	 * 
 	 * @return 処理結果を表す文字列（"success"）
 	 */
-	
-	  
     public String editForm() {
-    	logger.info("【編集フォーム】editForm()メソッド開始 - boardId: " + boardId);
-        item = Board.getDataById(boardId);
+        logger.info("【編集フォーム】editForm()メソッド開始 - boardId: " + boardId);
+        
+        item = boardService.getBoardForEdit(boardId);
+        
         if (item != null) {
             // 既存データをフィールドに設定
             this.category = item.getCategory();
             this.title = item.getTitle();
             this.content = item.getContent();
             this.writer = item.getWriter();
-            logger.info("【編集フォーム】編集画面表示 - boardId: " + boardId);
+            logger.debug("【編集フォーム】編集画面表示 - boardId: " + boardId);
             return "edit";
         } else {
-        	logger.error("【編集フォーム】投稿が見つかりませんでした - boardId: " + boardId);
+            logger.error("【編集フォーム】投稿が見つかりませんでした - boardId: " + boardId);
             addActionError("投稿が見つかりませんでした");
-            data = Board.getChatData();
+            data = BoardDao.getChatData();
             return "list";
         }
     }
+
     
     /**
      * 編集アクション：投稿を更新する
@@ -514,58 +485,59 @@ public class BoardAction extends ActionSupport {
      * board.jspの編集フォーム：action="boardEdit.action"
      * @return "success"を返してboard.jspを表示
      */
-	public String edit() {
-		 logger.info("【編集】edit()メソッド開始 - boardId: " + boardId);
-	       
-		if (title != null && content != null && writer != null &&
-				!title.equals("") && !content.equals("") && !writer.equals("")) {
-			
-	        String savedFileName = null;
-	        String savedFilePath = null;
-	        long fileSize = 0;
-	        
-	        if (upload != null) {
-	        	logger.info("【編集】ファイルアップロード: " + uploadFileName);
-	            
-	            // ファイルバリデーション
-	            if (!validateFile()) {
-	                data = Board.getChatData();
-	                return "list";
-	            }
-	            
-	            // ファイル保存
-	            try {
-	                String uploadPath = getUploadPath();
-	                savedFileName = uploadFileName;
-	                savedFilePath = saveFile(uploadPath);
-	                fileSize = upload.length();
-	                logger.info("【編集】ファイル保存成功: " + savedFileName);
-	            } catch (Exception e) {
-	                logger.error("【編集】ファイル保存失敗: " + e.getMessage(), e);
-	                addActionError("ファイルのアップロードに失敗しました");
-	                data = Board.getChatData();
-	                return "list";
-	            }
-	        }
-	        
-	        boolean success = Board.updateData(
-	                boardId, category, title, content, writer,
-	                savedFileName, savedFilePath, fileSize);
+    public String edit() {
+        logger.info("【編集】edit()メソッド開始 - boardId: " + boardId);
+        
+        if (title != null && content != null && writer != null &&
+            !title.equals("") && !content.equals("") && !writer.equals("")) {
+            
+            // ファイル処理
+        	FileInfo fileInfo = null;
 
-			if (success) {
-	            logger.debug("【編集】更新成功 - boardId: " + boardId + 
-	                       ", 作成者: " + writer);
-	        } else {
-	            logger.error("【編集】更新失敗 - boardId: " + boardId);
-	            addActionError("投稿が見つかりませんでした");
-	        }
-		} else {
-			logger.error("【編集】入力値エラー");
-			addActionError("すべて入力してください");
-		}
-	    data = Board.getChatData();
-	    return "list";
-	}
+        	if (upload != null) {
+                logger.debug("【編集】ファイルアップロード: " + uploadFileName);
+                
+                try {
+                    fileInfo = fileService.uploadFile(upload, uploadContentType, uploadFileName);
+                    logger.debug("【編集】ファイル保存成功: " + fileInfo.getFileName());
+                    
+                } catch (Exception e) {
+                    logger.error("【編集】ファイル保存失敗: " + e.getMessage(), e);
+                    addActionError(e.getMessage());
+                    data = boardService.getBoardList(null, null);
+                    return "list";
+                }
+            }
+            
+            // 投稿データ保存
+        	boolean success;
+            if (fileInfo != null) {
+                success = boardService.updateBoard(
+                    boardId, category, title, content, writer,
+                    fileInfo.getFileName(), fileInfo.getFilePath(), fileInfo.getFileSize()
+                );
+            } else {
+                success = boardService.updateBoard(
+                    boardId, category, title, content, writer
+                );
+            }
+            
+            if (success) {
+                logger.debug("【編集】更新成功 - boardId: " + boardId);
+            } else {
+                logger.error("【編集】更新失敗 - boardId: " + boardId);
+                addActionError("投稿が見つかりませんでした");
+            }
+        } else {
+            logger.error("【編集】入力値エラー");
+            addActionError("すべて入力してください");
+        }
+        
+        data = boardService.getBoardList(null, null);
+        return "list";
+
+    }
+
 
     /**
      * 削除アクション：投稿を削除する
@@ -574,16 +546,22 @@ public class BoardAction extends ActionSupport {
      * board.jspの削除フォーム：action="boardDelete.action"
      * @return "success"を返してboard.jspを表示
      */
-	public String delete() {
-		logger.info("【削除】delete()メソッド開始 - boardId: " + boardId);
-   		boolean success = Board.deleteData(boardId);
-		if (!success) {
-			logger.error("【削除】削除失敗 - boardId: " + boardId);
-			addActionError("投稿が見つかりませんでした");
-		}
-		logger.info("【削除】削除成功 - boardId: " + boardId);
-		return "list";
-	}
+    public String delete() {
+        logger.info("【削除】delete()メソッド開始 - boardId: " + boardId);
+        
+        // 投稿データ削除
+        boolean success = boardService.deleteBoard(boardId);
+        
+        if (!success) {
+            logger.error("【削除】削除失敗 - boardId: " + boardId);
+            addActionError("投稿が見つかりませんでした");
+        } else {
+            logger.info("【削除】削除成功 - boardId: " + boardId);
+        }
+        
+        return "list";
+    }
+
 
 	public boolean isValid() {
 		/*
@@ -667,121 +645,43 @@ public class BoardAction extends ActionSupport {
 		 */
 	}
 	
-	private boolean validateFile() {
-        // ファイルサイズチェック
-        if (upload.length() > MAX_FILE_SIZE) {
-            addActionError("ファイルサイズが大きすぎます（最大10MB）");
-            logger.warn("【ファイル検証】サイズ超過: " + upload.length() + " bytes");
-            return false;
-        }
-        
-        // ファイル形式チェック
-        boolean isAllowed = false;
-        for (String allowedType : ALLOWED_TYPES) {
-            if (uploadContentType.equals(allowedType)) {
-                isAllowed = true;
-                break;
-            }
-        }
-        
-        if (!isAllowed) {
-            addActionError("許可されていないファイル形式です");
-            logger.warn("【ファイル検証】不正な形式: " + uploadContentType);
-            return false;
-        }
-        
-        return true;
-    }
-    
-    /**
-     * アップロードディレクトリのパスを取得
-     */
-    private String getUploadPath() {
-        // Servlet Contextを通じて実際のパスを取得
-        String realPath = org.apache.struts2.ServletActionContext.getServletContext()
-            .getRealPath(UPLOAD_DIR);
-        
-        File uploadDir = new File(realPath);
-        if (!uploadDir.exists()) {
-            uploadDir.mkdirs();
-            logger.info("【ファイル保存】ディレクトリ作成: " + realPath);
-        }
-        
-        return realPath;
-    }
-    
-    /**
-     * ファイルを保存
-     * @param uploadPath 保存先ディレクトリ
-     * @return 保存されたファイルのパス
-     */
-    private String saveFile(String uploadPath) throws Exception {
-        // 固有のファイル名生成(UUID+オリジナルファイル名)
-        String uniqueFileName = UUID.randomUUID().toString() + "_" + uploadFileName;
-        File destFile = new File(uploadPath, uniqueFileName);
-        
-        // ファイルコピー
-        org.apache.commons.io.FileUtils.copyFile(upload, destFile);
-        
-        logger.info("【ファイル保存】保存完了: " + destFile.getAbsolutePath());
-        return UPLOAD_DIR + "/" + uniqueFileName;
-    }
-    
     public String download() {
         logger.info("【ファイルダウンロード】boardId: " + boardId);
         
         try {
             // 掲示板情報照会
-            item = Board.getDataById(boardId);
+        	item = boardService.getBoardForEdit(boardId);
             
             if (item == null || !item.hasFile()) {
+            	logger.error("【ファイルダウンロード】ファイルが見つかりません");
                 addActionError("ファイルが見つかりません");
-                return "error";
+                return ERROR;
             }
             
             // ファイルパス
-            String realPath = org.apache.struts2.ServletActionContext.getServletContext()
-                .getRealPath(item.getFilePath());
-            
-            File file = new File(realPath);
-            
-            if (!file.exists()) {
-                addActionError("ファイルが存在しません");
-                return "error";
+            String realPath = ServletActionContext.getServletContext()
+                    .getRealPath(item.getFilePath());
+                
+                File file = new File(realPath);
+                
+                if (!file.exists()) {
+                    logger.error("【ファイルダウンロード】ファイルが存在しません: " + realPath);
+                    addActionError("ファイルが存在しません");
+                    return ERROR;
+                }
+                
+                // 3. InputStreamとファイル名を設定
+                this.inputStream = new FileInputStream(file);
+                this.fileName = item.getFileName();
+                
+                logger.debug("【ファイルダウンロード】成功: " + fileName);
+                
+                return SUCCESS;
+                
+            } catch (Exception e) {
+                logger.error("【ファイルダウンロード】エラー", e);
+                addActionError("ダウンロードに失敗しました: " + e.getMessage());
+                return ERROR;
             }
-            
-            // ダウンロード処理
-            javax.servlet.http.HttpServletResponse response = 
-                org.apache.struts2.ServletActionContext.getResponse();
-            
-            response.setContentType("application/octet-stream");
-            response.setContentLength((int) file.length());
-            response.setHeader("Content-Disposition", 
-                "attachment; filename=\"" + 
-                java.net.URLEncoder.encode(item.getFileName(), "UTF-8").replaceAll("\\+", "%20") + 
-                "\"");
-            
-            // ファイル転送
-            java.io.FileInputStream fis = new java.io.FileInputStream(file);
-            java.io.OutputStream os = response.getOutputStream();
-            
-            byte[] buffer = new byte[4096];
-            int bytesRead;
-            while ((bytesRead = fis.read(buffer)) != -1) {
-                os.write(buffer, 0, bytesRead);
-            }
-            
-            fis.close();
-            os.flush();
-            
-            logger.info("【ファイルダウンロード】成功: " + item.getFileName());
-            return null; // nullを返すとビューをレンダリングしない
-            
-        } catch (Exception e) {
-            logger.error("【ファイルダウンロード】エラー", e);
-            addActionError("ダウンロードに失敗しました");
-            return "error";
-        }
     }
-
 }

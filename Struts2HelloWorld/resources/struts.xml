@@ -102,8 +102,23 @@
 		    </result>
 		</action>
 		
+		<!-- ファイルダウンロード -->
 		<action name="boardFileDownload" class="action.BoardAction" method="download">
-		    <result name="error">/WEB-INF/view/board/error.jsp</result>
-		</action>
+            <result name="success" type="stream">
+                <!-- Content-Type設定 -->
+                <param name="contentType">application/octet-stream</param>
+                <!-- Actionのどのようなgetterを呼び出すか指定 -->
+                <!-- getInputStream()メソッド呼び出し -->
+                <param name="inputName">inputStream</param>
+                <!-- ダウンロードファイル名設定 -->
+                <!-- getFileName()メソッド呼び出し -->
+                <param name="contentDisposition">attachment;filename="${fileName}"</param>
+                <!-- buffer大きさ設定（オプション） -->
+                <param name="bufferSize">4096</param>
+            </result>
+            
+            <!-- エラー時 -->
+            <result name="error">/WEB-INF/view/board/list.jsp</result>
+        </action>
     </package>
 </struts>

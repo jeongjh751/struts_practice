@@ -1,4 +1,4 @@
-package model;
+package dao;
 
 import java.sql.Connection;
 import java.sql.PreparedStatement;
@@ -10,6 +10,9 @@ import java.util.List;
 
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
+
+import model.CommentData;
+import util.DBConnection;
 
 /**
  * 【Commentクラス】
@@ -23,10 +26,11 @@ import org.apache.logging.log4j.Logger;
  * 
  * Boardクラスと同じスタイルで実装
  */
-public class Comment {
+public class CommentDao {
     
     // ========== ロガー ==========
-    private static final Logger logger = LogManager.getLogger(Comment.class);
+    private static final Logger logger = LogManager.getLogger(CommentDao.class);
+    private static DBConnection dbConnection = DBConnection.getInstance();
     
     /**
      * コメント追加
@@ -34,14 +38,14 @@ public class Comment {
      * @return 成功した場合true、失敗した場合false
      */
     public static boolean addComment(CommentData comment) {
-        logger.debug("【コメント追加】addComment開始");
+        logger.info("【コメント追加】addComment開始");
         logger.debug("【コメント追加】board_id: " + comment.getBoardId() + 
                     ", writer: " + comment.getWriter());
         
         String sql = "INSERT INTO comment_data (board_id, writer, content, parent_comment_id, ip_address) " +
                      "VALUES (?, ?, ?, ?, ?::inet)";
         
-        try (Connection conn = DBConnection.getConnection();
+        try (Connection conn = dbConnection.getConnection();
              PreparedStatement pstmt = conn.prepareStatement(sql)) {
             
             pstmt.setLong(1, comment.getBoardId());
@@ -66,7 +70,7 @@ public class Comment {
             int result = pstmt.executeUpdate();
             
             if (result > 0) {
-                logger.info("【コメント追加】追加成功 - board_id: " + comment.getBoardId());
+                logger.debug("【コメント追加】追加成功 - board_id: " + comment.getBoardId());
                 return true;
             } else {
                 logger.warn("【コメント追加】追加失敗");
@@ -124,7 +128,7 @@ public class Comment {
      * @return コメントリスト
      */
     public static List<CommentData> getCommentsByBoardId(long boardId) {
-        logger.debug("【コメント取得】getCommentsByBoardId開始 - board_id: " + boardId);
+        logger.info("【コメント取得】getCommentsByBoardId開始 - board_id: " + boardId);
         
         List<CommentData> comments = new ArrayList<>();
         
@@ -138,7 +142,7 @@ public class Comment {
                      "parent_comment_id NULLS FIRST, " +
                      "created_at ASC";
         
-        try (Connection conn = DBConnection.getConnection();
+        try (Connection conn = dbConnection.getConnection();
              PreparedStatement pstmt = conn.prepareStatement(sql)) {
             
             pstmt.setLong(1, boardId);
@@ -166,7 +170,7 @@ public class Comment {
                 }
             }
             
-            logger.info("【コメント取得】取得成功 - 件数: " + comments.size());
+            logger.debug("【コメント取得】取得成功 - 件数: " + comments.size());
             
         } catch (SQLException e) {
             logger.error("【コメント取得】SQLException エラー - board_id: " + boardId, e);
@@ -181,14 +185,14 @@ public class Comment {
      * @return コメントデータ（見つからない場合はnull）
      */
     public static CommentData getCommentById(long commentId) {
-        logger.debug("【コメント取得】getCommentById開始 - comment_id: " + commentId);
+        logger.info("【コメント取得】getCommentById開始 - comment_id: " + commentId);
         
         String sql = "SELECT comment_id, board_id, writer, content, " +
                      "parent_comment_id, ip_address, is_deleted, created_at, updated_at " +
                      "FROM comment_data " +
                      "WHERE comment_id = ? AND is_deleted = FALSE";
         
-        try (Connection conn = DBConnection.getConnection();
+        try (Connection conn = dbConnection.getConnection();
              PreparedStatement pstmt = conn.prepareStatement(sql)) {
             
             pstmt.setLong(1, commentId);
@@ -211,7 +215,7 @@ public class Comment {
                     comment.setCreatedAt(rs.getTimestamp("created_at"));
                     comment.setUpdatedAt(rs.getTimestamp("updated_at"));
                     
-                    logger.info("【コメント取得】取得成功 - comment_id: " + commentId);
+                    logger.debug("【コメント取得】取得成功 - comment_id: " + commentId);
                     return comment;
                 }
             }
@@ -231,12 +235,12 @@ public class Comment {
      * @return 成功した場合true
      */
     public static boolean updateComment(long commentId, String content) {
-        logger.debug("【コメント更新】updateComment開始 - comment_id: " + commentId);
+        logger.info("【コメント更新】updateComment開始 - comment_id: " + commentId);
         
         String sql = "UPDATE comment_data SET content = ?, updated_at = CURRENT_TIMESTAMP " +
                      "WHERE comment_id = ? AND is_deleted = FALSE";
         
-        try (Connection conn = DBConnection.getConnection();
+        try (Connection conn = dbConnection.getConnection();
              PreparedStatement pstmt = conn.prepareStatement(sql)) {
             
             pstmt.setString(1, content);
@@ -245,7 +249,7 @@ public class Comment {
             int result = pstmt.executeUpdate();
             
             if (result > 0) {
-                logger.info("【コメント更新】更新成功 - comment_id: " + commentId);
+                logger.debug("【コメント更新】更新成功 - comment_id: " + commentId);
                 return true;
             } else {
                 logger.warn("【コメント更新】対象データなし - comment_id: " + commentId);
@@ -264,12 +268,12 @@ public class Comment {
      * @return 成功した場合true
      */
     public static boolean deleteComment(long commentId) {
-        logger.debug("【コメント削除】deleteComment開始 - comment_id: " + commentId);
+        logger.info("【コメント削除】deleteComment開始 - comment_id: " + commentId);
         
         String sql = "UPDATE comment_data SET is_deleted = TRUE, updated_at = CURRENT_TIMESTAMP " +
                      "WHERE comment_id = ?";
         
-        try (Connection conn = DBConnection.getConnection();
+        try (Connection conn = dbConnection.getConnection();
              PreparedStatement pstmt = conn.prepareStatement(sql)) {
             
             pstmt.setLong(1, commentId);
@@ -277,7 +281,7 @@ public class Comment {
             int result = pstmt.executeUpdate();
             
             if (result > 0) {
-                logger.info("【コメント削除】削除成功 - comment_id: " + commentId);
+                logger.debug("【コメント削除】削除成功 - comment_id: " + commentId);
                 return true;
             } else {
                 logger.warn("【コメント削除】対象データなし - comment_id: " + commentId);
@@ -296,12 +300,12 @@ public class Comment {
      * @return コメント数
      */
     public static int getCommentCount(long boardId) {
-        logger.debug("【コメント数取得】getCommentCount開始 - board_id: " + boardId);
+        logger.info("【コメント数取得】getCommentCount開始 - board_id: " + boardId);
         
         String sql = "SELECT COUNT(*) FROM comment_data " +
                      "WHERE board_id = ? AND is_deleted = FALSE";
         
-        try (Connection conn = DBConnection.getConnection();
+        try (Connection conn = dbConnection.getConnection();
              PreparedStatement pstmt = conn.prepareStatement(sql)) {
             
             pstmt.setLong(1, boardId);
@@ -309,7 +313,7 @@ public class Comment {
             try (ResultSet rs = pstmt.executeQuery()) {
                 if (rs.next()) {
                     int count = rs.getInt(1);
-                    logger.info("【コメント数取得】取得成功 - board_id: " + boardId + ", count: " + count);
+                    logger.debug("【コメント数取得】取得成功 - board_id: " + boardId + ", count: " + count);
                     return count;
                 }
             }

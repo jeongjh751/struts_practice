@@ -1,4 +1,4 @@
-package model;
+package dao;
 
 import java.sql.Connection;
 import java.sql.PreparedStatement;
@@ -7,6 +7,9 @@ import java.sql.SQLException;
 import java.sql.Statement;
 import java.util.ArrayList;
 import java.util.List;
+
+import model.BoardData;
+import util.DBConnection;
 
 /**
  * 【Boardクラス】
@@ -22,8 +25,10 @@ import java.util.List;
  * - 現在: PostgreSQL データベースに保存
  * - メリット: サーバー再起動してもデータが消えない
  */
-public class Board {
+public class BoardDao {
     
+	private static DBConnection dbConnection = DBConnection.getInstance();
+
     /**
      * 【addChatData メソッド】
      * 掲示板に新しい投稿を追加する
@@ -70,7 +75,7 @@ public class Board {
         
         try {
             // 1. データベースに接続
-            conn = DBConnection.getConnection();
+            conn = dbConnection.getConnection();
             /*
              * DBConnection.getConnection()の動作:
              * - PostgreSQLドライバをロード
@@ -179,7 +184,7 @@ public class Board {
         
         try {
             // 1. データベースに接続
-            conn = DBConnection.getConnection();
+            conn = dbConnection.getConnection();
             
             // 2. Statementオブジェクト作成
             stmt = conn.createStatement();
@@ -293,7 +298,7 @@ public class Board {
         
         try {
             // 1. データベースに接続
-            conn = DBConnection.getConnection();
+            conn = dbConnection.getConnection();
             
             // 2. SQL準備
             pstmt = conn.prepareStatement(sql);
@@ -390,7 +395,7 @@ public class Board {
         
         try {
             // 1. データベースに接続
-            conn = DBConnection.getConnection();
+            conn = dbConnection.getConnection();
             
             // 2. SQL準備
             pstmt = conn.prepareStatement(sql);
@@ -467,7 +472,7 @@ public class Board {
         
         try {
             // 1. データベースに接続
-            conn = DBConnection.getConnection();
+            conn = dbConnection.getConnection();
             
             // 2. SQL準備
             pstmt = conn.prepareStatement(sql);
@@ -519,7 +524,7 @@ public class Board {
         PreparedStatement pstmt = null;
         
         try {
-            conn = DBConnection.getConnection();
+            conn = dbConnection.getConnection();
             pstmt = conn.prepareStatement(sql);
             pstmt.setLong(1, id);
             
@@ -572,7 +577,7 @@ public class Board {
         }
         
         // Connectionをクローズ
-        DBConnection.closeConnection(conn);
+        dbConnection.closeConnection(conn);
         /*
          * DBConnection.closeConnection():
          * - null チェックと例外処理を含む

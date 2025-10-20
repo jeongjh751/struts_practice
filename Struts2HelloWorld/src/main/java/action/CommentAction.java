@@ -10,7 +10,7 @@ import org.apache.struts2.ServletActionContext;
 
 import com.opensymphony.xwork2.ActionSupport;
 
-import model.Comment;
+import dao.CommentDao;
 import model.CommentData;
 
 /**
@@ -114,7 +114,7 @@ public class CommentAction extends ActionSupport {
      * @return 成功時は投稿詳細ページへリダイレクト
      */
     public String add() {
-        logger.debug("【コメント追加】add()メソッド開始");
+        logger.info("【コメント追加】add()メソッド開始");
         logger.debug("【コメント追加】board_id: " + boardId + ", writer: " + writer);
         
         // IPアドレスをActionで直接取得
@@ -139,10 +139,10 @@ public class CommentAction extends ActionSupport {
         newComment.setIpAddress(ipAddress);
         
         // データベースに追加
-        boolean success = Comment.addComment(newComment);
+        boolean success = CommentDao.addComment(newComment);
         
         if (success) {
-            logger.info("【コメント追加】追加成功 - board_id: " + boardId);
+            logger.debug("【コメント追加】追加成功 - board_id: " + boardId);
             return "success";
         } else {
             logger.error("【コメント追加】追加失敗 - board_id: " + boardId);
@@ -157,11 +157,11 @@ public class CommentAction extends ActionSupport {
      * @return コメント一覧を含むページ
      */
     public String list() {
-        logger.debug("【コメント一覧】list()メソッド開始 - board_id: " + boardId);
+        logger.info("【コメント一覧】list()メソッド開始 - board_id: " + boardId);
         
-        comments = Comment.getCommentsByBoardId(boardId);
+        comments = CommentDao.getCommentsByBoardId(boardId);
         
-        logger.info("【コメント一覧】取得完了 - 件数: " + comments.size());
+        logger.debug("【コメント一覧】取得完了 - 件数: " + comments.size());
         
         return "success";
     }
@@ -171,13 +171,13 @@ public class CommentAction extends ActionSupport {
      * @return 編集フォームページ
      */
     public String editForm() {
-        logger.debug("【コメント編集フォーム】editForm()メソッド開始 - comment_id: " + commentId);
+        logger.info("【コメント編集フォーム】editForm()メソッド開始 - comment_id: " + commentId);
         
-        comment = Comment.getCommentById(commentId);
+        comment = CommentDao.getCommentById(commentId);
         
         if (comment != null) {
             this.content = comment.getContent();
-            logger.info("【コメント編集フォーム】表示成功 - comment_id: " + commentId);
+            logger.debug("【コメント編集フォーム】表示成功 - comment_id: " + commentId);
             return "edit";
         } else {
             logger.warn("【コメント編集フォーム】コメントが見つかりません - comment_id: " + commentId);
@@ -191,7 +191,7 @@ public class CommentAction extends ActionSupport {
      * @return 成功時は投稿詳細ページへリダイレクト
      */
     public String edit() {
-        logger.debug("【コメント更新】edit()メソッド開始 - comment_id: " + commentId);
+        logger.info("【コメント更新】edit()メソッド開始 - comment_id: " + commentId);
         
         if (content == null || content.trim().isEmpty()) {
             logger.warn("【コメント更新】内容が空です");
@@ -201,16 +201,16 @@ public class CommentAction extends ActionSupport {
         
         // 更新前にboardIdを取得（Redirect用）
         if (boardId == 0) {
-            CommentData comment = Comment.getCommentById(commentId);
+            CommentData comment = CommentDao.getCommentById(commentId);
             if (comment != null) {
                 boardId = comment.getBoardId();
             }
         }
         
-        boolean success = Comment.updateComment(commentId, content);
+        boolean success = CommentDao.updateComment(commentId, content);
         
         if (success) {
-            logger.info("【コメント更新】更新成功 - comment_id: " + commentId);
+            logger.debug("【コメント更新】更新成功 - comment_id: " + commentId);
             return "success";
         } else {
             logger.error("【コメント更新】更新失敗 - comment_id: " + commentId);
@@ -224,12 +224,12 @@ public class CommentAction extends ActionSupport {
      * @return 成功時は投稿詳細ページへリダイレクト
      */
     public String delete() {
-        logger.debug("【コメント削除】delete()メソッド開始 - comment_id: " + commentId);
+        logger.info("【コメント削除】delete()メソッド開始 - comment_id: " + commentId);
         
-        boolean success = Comment.deleteComment(commentId);
+        boolean success = CommentDao.deleteComment(commentId);
         
         if (success) {
-            logger.info("【コメント削除】削除成功 - comment_id: " + commentId);
+            logger.debug("【コメント削除】削除成功 - comment_id: " + commentId);
             return "success";
         } else {
             logger.error("【コメント削除】削除失敗 - comment_id: " + commentId);
