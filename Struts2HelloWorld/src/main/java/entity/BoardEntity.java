@@ -1,4 +1,4 @@
-package model;
+package entity;
 
 import java.sql.Timestamp;
 
@@ -21,7 +21,7 @@ import java.sql.Timestamp;
  * - フォームからの入力値が自動的にsetterメソッドで設定される
  * - JSPでの表示時にgetterメソッドが自動的に呼ばれる
  */
-public class BoardData {
+public class BoardEntity {
 
     // ========== フィールド宣言 ==========
     // すべてprivateで宣言し、外部から直接アクセスできないようにする
@@ -185,7 +185,7 @@ public class BoardData {
      * 秘密投稿フラグを取得
      * @return 秘密投稿の場合true
      */
-    public boolean isSecret() {
+    public boolean getIsSecret() {
         return isSecret;
     }
     
@@ -193,7 +193,7 @@ public class BoardData {
      * 削除フラグを取得
      * @return 削除済みの場合true
      */
-    public boolean isDeleted() {
+    public boolean getIsDeleted() {
         return isDeleted;
     }
     
@@ -343,7 +343,7 @@ public class BoardData {
      * 秘密投稿フラグを設定
      * @param isSecret 秘密投稿フラグ
      */
-    public void setSecret(boolean isSecret) {
+    public void setIsSecret(boolean isSecret) {
         this.isSecret = isSecret;
     }
     
@@ -351,7 +351,7 @@ public class BoardData {
      * 削除フラグを設定
      * @param isDeleted 削除フラグ
      */
-    public void setDeleted(boolean isDeleted) {
+    public void setIsDeleted(boolean isDeleted) {
         this.isDeleted = isDeleted;
     }
     
@@ -377,17 +377,6 @@ public class BoardData {
      */
     public void setFileSize(long fileSize) {
         this.fileSize = fileSize;
-    }
-    
-    // ファイルサイズを読みやすい形式で返す
-    public String getFormattedFileSize() {
-        if (fileSize == 0) 
-        	return "";
-        if (fileSize < 1024) 
-        	return fileSize + " B";
-        if (fileSize < 1024 * 1024) 
-        	return String.format("%.1f KB", fileSize / 1024.0);
-        	return String.format("%.1f MB", fileSize / (1024.0 * 1024.0));
     }
     
     // ファイルが添付されていることを確認

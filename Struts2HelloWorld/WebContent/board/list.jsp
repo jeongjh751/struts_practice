@@ -1,5 +1,5 @@
 <%@page language="java" contentType="text/html; charset=UTF-8" pageEncoding="UTF-8"%>
-<%@page import="model.Board"%>
+<%@page import="dao.BoardDao"%>
 <%@page import="com.opensymphony.xwork2.util.ValueStack"%>
 <%@page import="org.apache.struts2.ServletActionContext"%>
 <!DOCTYPE html>
@@ -90,7 +90,7 @@
  */
 ValueStack stack = (ValueStack)request.getAttribute(ServletActionContext.STRUTS_VALUESTACK_KEY);
 if(stack!=null && stack.findValue("data")==null){
-    stack.set("data", Board.getChatData());
+    stack.set("data", BoardDao.getChatData());
 }
 %>
 

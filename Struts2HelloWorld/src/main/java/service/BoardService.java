@@ -2,12 +2,17 @@ package service;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.stream.Collectors;
 
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
 import dao.BoardDao;
-import model.BoardData;
+import dto.request.BoardCreateRequest;
+import dto.request.BoardUpdateRequest;
+import dto.response.BoardDetailResponse;
+import dto.response.BoardListResponse;
+import entity.BoardEntity;
 
 /**
  * 【BoardServiceクラス】
@@ -33,15 +38,15 @@ public class BoardService {
      * - カテゴリフィルタリング
      * - タイトル検索
      */
-    public List<BoardData> getBoardList(String category, String searchKeyword) {
+    public List<BoardListResponse> getBoardList(String category, String searchKeyword) {
         logger.info("【Service】掲示板一覧取得開始");
         
         try {
             // 1. 全データ取得
-            List<BoardData> data = BoardDao.getChatData();
+            List<BoardEntity> entities = BoardDao.findAll();
             
-            if (data == null) {
-                logger.warn("【Service】データが取得できませんでした");
+            if (entities == null || entities.isEmpty()) {
+                logger.warn("【Service】照会された掲示板がありません");
                 return new ArrayList<>();
             }
             
@@ -49,19 +54,32 @@ public class BoardService {
             /*
             if (category != null && !category.trim().isEmpty()) {
                 logger.debug("【Service】カテゴリフィルタ適用: " + category);
-                data = filterByCategory(data, category);
+                entities = entities.stream()
+                    .filter(e -> category.equals(e.getCategory()))
+                    .collect(Collectors.toList());
             }
             */
             
             // 3. タイトル検索フィルタリング
             if (searchKeyword != null && !searchKeyword.trim().isEmpty()) {
                 logger.debug("【Service】検索キーワード適用: " + searchKeyword);
-                data = filterByKeyword(data, searchKeyword);
-                logger.debug("【Service】検索結果: " + data.size() + "件");
+                String keyword = searchKeyword.toLowerCase();
+                entities = entities.stream()
+                    .filter(e -> e.getTitle() != null && 
+                                e.getTitle().toLowerCase().contains(keyword))
+                    .collect(Collectors.toList());
+                logger.debug("【Service】検索結果: " + entities.size() + "件");
             }
             
-            logger.debug("【Service】投稿件数: " + data.size());
-            return data;
+            // 4. Entity → ListResponse DTO変換
+            List<BoardListResponse> responses = entities.stream() // Listをstreamに変換
+                    .map(BoardListResponse::from) 
+                    // 各EntityをResponseに変換
+                    // BoardListResponse.from(entity)メソッド呼び出し
+                    .collect(Collectors.toList()); // Streamを再びListに変換
+                // Stream APIとは？コレクション(List、Setなど)を関数型で処理する方法
+                logger.debug("【Service】掲示板一覧取得完了: " + responses.size() + "件");
+                return responses;
             
         } catch (Exception e) {
             logger.error("【Service】一覧取得エラー: " + e.getMessage(), e);
@@ -73,126 +91,149 @@ public class BoardService {
      * 掲示板詳細を取得
      * 
      * @param boardId 掲示板ID
-     * @return 掲示板データ（見つからない場合null）
+     * @return 掲示板詳細Response DTO（見つからない場合null）
      * 
-     * 【機能】
-     * - ID指定でデータ取得
-     * - 閲覧数の自動カウントアップ
+     * 処理フロー:
+     * 1. DAOからEntity照会
+     * 2. 閲覧数増加
+     * 3. Entity → DetailResponse DTOへ変換
+     * 4. DTOを返却
      */
-    public BoardData getBoardDetail(long boardId) {
+    public BoardDetailResponse getBoardDetail(long boardId) {
         logger.info("【Service】詳細取得開始 - boardId: " + boardId);
         
-        BoardData item = BoardDao.getDataById(boardId);
-        
-        if (item != null) {
-            // 閲覧数+1
+        try {
+            // 1. DAOからEntity照会
+            BoardEntity entity = BoardDao.findById(boardId);
+            
+            if (entity == null) {
+                logger.error("【Service】掲示板が見つかりません - boardId: " + boardId);
+                return null;
+            }
+            
+            // 2. 閲覧数増加
             BoardDao.incrementViewCount(boardId);
-            logger.debug("【Service】詳細取得成功 - boardId: " + boardId);
-        } else {
-            logger.error("【Service】投稿が見つかりませんでした - boardId: " + boardId);
+            
+            // 3. Entity -> DetailResponse DTO変換
+            BoardDetailResponse response = BoardDetailResponse.from(entity);
+            
+            logger.debug("【Service】掲示板詳細取得完了 - boardId: " + boardId);
+            return response;
+            
+        } catch (Exception e) {
+            logger.error("【Service】詳細取得エラー: " + e.getMessage(), e);
+            return null;
         }
-        
-        return item;
+
     }
     
     /**
      * 新規掲示板を作成
      * 
-     * @param category カテゴリ
-     * @param title タイトル
-     * @param content 内容
-     * @param writer 作成者
-     * @param ipAddress IPアドレス
-     * @param fileName ファイル名（nullの場合はファイルなし）
-     * @param filePath ファイルパス
-     * @param fileSize ファイルサイズ
+     * @param request 掲示板生成Request DTO
      * @return 成功時true、失敗時false
+     * 
+     * 処理フロー:
+     * 1. 入力値検証
+     * 2. Request DTO -> DAOメソッドパラメータへ変換
+     * 3. DAOを通じてDB保存
      */
-    public boolean createBoard(String category, String title, String content,
-                               String writer, String ipAddress,
-                               String fileName, String filePath, long fileSize) {
+    public boolean createBoard(BoardCreateRequest request) {
         
         logger.info("【Service】新規投稿開始");
-        logger.debug("【Service】writer: " + writer + ", title: " + title);
-        
-        boolean success = BoardDao.addChatData(
-            category, title, content, writer, ipAddress,
-            fileName, filePath, fileSize
-        );
-        
-        if (success) {
-            logger.debug("【Service】投稿成功 - writer: " + writer);
-        } else {
-            logger.error("【Service】投稿失敗 - writer: " + writer);
+        logger.debug("【Service】writer: " + request.getWriter() + 
+                ", title: " + request.getTitle());
+
+        try {
+            // 1. 入力値検証
+            if (!request.isValid()) {
+                logger.error("【Service】入力値検証失敗");
+                return false;
+            }
+            
+            // 2. DAOを通じてDB保存
+            boolean success = BoardDao.insert(
+                request.getCategory(),
+                request.getTitle(),
+                request.getContent(),
+                request.getWriter(),
+                request.getIpAddress(),
+                request.getFileName(),
+                request.getFilePath(),
+                request.getFileSize()
+            );
+            
+            if (success) {
+                logger.debug("【Service】掲示板生成成功 - writer: " + request.getWriter());
+            } else {
+                logger.error("【Service】掲示板生成失敗 - writer: " + request.getWriter());
+            }
+            
+            return success;
+            
+        } catch (Exception e) {
+            logger.error("【Service】掲示板生成エラー: " + e.getMessage(), e);
+            return false;
         }
-        
-        return success;
-    }
-    
-    /**
-     * ファイルなしで掲示板を作成（下位互換性維持）
-     * 
-     * @param category カテゴリ
-     * @param title タイトル
-     * @param content 内容
-     * @param writer 作成者
-     * @param ipAddress IPアドレス
-     * @return 成功時true、失敗時false
-     */
-    public boolean createBoard(String category, String title, String content,
-                               String writer, String ipAddress) {
-        return createBoard(category, title, content, writer, ipAddress, 
-                          null, null, 0);
+
     }
     
     /**
      * 掲示板を更新
      * 
-     * @param boardId 掲示板ID
-     * @param category カテゴリ
-     * @param title タイトル
-     * @param content 内容
-     * @param writer 作成者
-     * @param fileName ファイル名
-     * @param filePath ファイルパス
-     * @param fileSize ファイルサイズ
+     * @param request 掲示板修正Request DTO
      * @return 成功時true、失敗時false
-     */
-    public boolean updateBoard(long boardId, String category, String title,
-                               String content, String writer,
-                               String fileName, String filePath, long fileSize) {
-        
-        logger.info("【Service】更新開始 - boardId: " + boardId);
-        
-        boolean success = BoardDao.updateData(
-            boardId, category, title, content, writer,
-            fileName, filePath, fileSize
-        );
-        
-        if (success) {
-            logger.debug("【Service】更新成功 - boardId: " + boardId + 
-                       ", 作成者: " + writer);
-        } else {
-            logger.error("【Service】更新失敗 - boardId: " + boardId);
-        }
-        
-        return success;
-    }
-    
-    /**
-     * ファイルなしで掲示板を更新（下位互換性維持）
      * 
-     * @param boardId 掲示板ID
-     * @param category カテゴリ
-     * @param title タイトル
-     * @param content 内容
-     * @param writer 作成者
-     * @return 成功時true、失敗時false
+     * 処理フロー:
+     * 1. 入力値検証
+     * 2. 既存掲示板存在確認
+     * 3. Request DTO → DAOメソッドパラメータへ変換
+     * 4. DAOを通じてDB更新
      */
-    public boolean updateBoard(long boardId, String category, String title,
-                               String content, String writer) {
-        return updateBoard(boardId, category, title, content, writer,
-                          null, null, 0);
+    public boolean updateBoard(BoardUpdateRequest request) {
+    	
+    	logger.info("【Service】掲示板修正開始 - boardId: " + request.getBoardId());
+        
+    	try {
+            // 1. 入力値検証
+            if (!request.isValid()) {
+                logger.error("【Service】入力値検証失敗");
+                return false;
+            }
+            
+            // 2. 既存掲示板存在確認
+            BoardEntity existingEntity = BoardDao.findById(request.getBoardId());
+            if (existingEntity == null) {
+                logger.error("【Service】修正する掲示板が見つかりません - boardId: " 
+                           + request.getBoardId());
+                return false;
+            }
+            
+            // 3. DAOを通じてDB更新
+            boolean success = BoardDao.update(
+                request.getBoardId(),
+                request.getCategory(),
+                request.getTitle(),
+                request.getContent(),
+                request.getWriter(),
+                request.getFileName(),
+                request.getFilePath(),
+                request.getFileSize()
+            );
+            
+            if (success) {
+                logger.debug("【Service】掲示板修正成功 - boardId: " + request.getBoardId());
+            } else {
+                logger.error("【Service】掲示板修正失敗 - boardId: " + request.getBoardId());
+            }
+            
+            return success;
+            
+        } catch (Exception e) {
+            logger.error("【Service】掲示板修正エラー: " + e.getMessage(), e);
+            return false;
+        }
+
     }
     
     /**
@@ -202,125 +243,64 @@ public class BoardService {
      * @return 成功時true、失敗時false
      */
     public boolean deleteBoard(long boardId) {
-        logger.info("【Service】削除開始 - boardId: " + boardId);
+        logger.info("【Service】掲示板削除開始 - boardId: " + boardId);
         
-        boolean success = BoardDao.deleteData(boardId);
-        
-        if (!success) {
-            logger.error("【Service】削除失敗 - boardId: " + boardId);
-        } else {
-            logger.info("【Service】削除成功 - boardId: " + boardId);
+        try {
+            // 1. 掲示板存在確認
+            BoardEntity entity = BoardDao.findById(boardId);
+            if (entity == null) {
+                logger.error("【Service】削除する掲示板が見つかりません - boardId: " + boardId);
+                return false;
+            }
+            
+            // 2. DAOを通じて論理削除
+            boolean success = BoardDao.delete(boardId);
+            
+            if (success) {
+                logger.info("【Service】掲示板削除成功 - boardId: " + boardId);
+            } else {
+                logger.error("【Service】掲示板削除失敗 - boardId: " + boardId);
+            }
+            
+            return success;
+            
+        } catch (Exception e) {
+            logger.error("【Service】掲示板削除エラー: " + e.getMessage(), e);
+            return false;
         }
-        
-        return success;
+
     }
     
     /**
      * 編集フォーム用のデータ取得
      * 
      * @param boardId 掲示板ID
-     * @return 掲示板データ（見つからない場合はnull）
+     * return 掲示板詳細Response DTO（なければnull）
      * 
      * 【機能】
      * - 編集画面で既存データを表示するために使用
      * - 閲覧数は増やさない（getBoardDetailとの違い）
      */
-    public BoardData getBoardForEdit(long boardId) {
-        logger.info("【Service】編集データ取得 - boardId: " + boardId);
+    public BoardDetailResponse getBoardForEdit(long boardId) {
+    	logger.info("【Service】修正フォーム用照会 - boardId: " + boardId);
         
-        BoardData item = BoardDao.getDataById(boardId);
-        
-        if (item != null) {
-            logger.debug("【Service】編集データ取得成功 - boardId: " + boardId);
-        } else {
-            logger.error("【Service】投稿が見つかりませんでした - boardId: " + boardId);
-        }
-        
-        return item;
-    }
-    
-    // ========== プライベートヘルパーメソッド ==========
-    
-    /**
-     * カテゴリでフィルタリング（将来の機能用）
-     * 
-     * @param boards 掲示板リスト
-     * @param category カテゴリ
-     * @return フィルタリング後のリスト
-     * 
-     * 【使用例】
-     * List<BoardData> noticeBoards = filterByCategory(allBoards, "お知らせ");
-     */
-    private List<BoardData> filterByCategory(List<BoardData> boards, String category) {
-        List<BoardData> filtered = new ArrayList<>();
-        
-        for (BoardData board : boards) {
-            if (board != null && category.equals(board.getCategory())) {
-                filtered.add(board);
+        try {
+            // 閲覧数増加なしで単純照会のみ
+            BoardEntity entity = BoardDao.findById(boardId);
+            
+            if (entity == null) {
+                logger.error("【Service】掲示板が見つかりません - boardId: " + boardId);
+                return null;
             }
+            
+            BoardDetailResponse response = BoardDetailResponse.from(entity);
+            logger.debug("【Service】修正フォーム用照会完了 - boardId: " + boardId);
+            
+            return response;
+            
+        } catch (Exception e) {
+            logger.error("【Service】修正フォーム用照会エラー: " + e.getMessage(), e);
+            return null;
         }
-        
-        logger.debug("【Service】カテゴリフィルタ結果: " + filtered.size() + "件");
-        return filtered;
-    }
-    
-    /**
-     * キーワードでフィルタリング
-     * 
-     * @param boards 掲示板リスト
-     * @param keyword 検索キーワード
-     * @return フィルタリング後のリスト
-     * 
-     * 【検索対象】
-     * - タイトル（大文字小文字を区別しない）
-     * 
-     * 【検索ロジック】
-     * 1. キーワードを小文字に変換
-     * 2. タイトルも小文字に変換
-     * 3. 部分一致で検索
-     */
-    private List<BoardData> filterByKeyword(List<BoardData> boards, String keyword) {
-        List<BoardData> filtered = new ArrayList<>();
-        String lowerKeyword = keyword.trim().toLowerCase();
-        
-        for (BoardData board : boards) {
-            if (board != null && board.getTitle() != null) {
-                String lowerTitle = board.getTitle().toLowerCase();
-                if (lowerTitle.contains(lowerKeyword)) {
-                    filtered.add(board);
-                }
-            }
-        }
-        
-        return filtered;
-    }
-    
-    /**
-     * 掲示板データの基本検証
-     * 
-     * @param title タイトル
-     * @param content 内容
-     * @param writer 作成者
-     * @return 有効な場合true
-     * 
-     * 【検証項目】
-     * - タイトル: null、空文字チェック
-     * - 内容: null、空文字チェック
-     * - 作成者: null、空文字チェック
-     */
-    public boolean validateBoardData(String title, String content, String writer) {
-        if (title == null || title.trim().isEmpty()) {
-            logger.warn("【Service】バリデーションエラー: タイトルが空です");
-            return false;
-        }
-        if (content == null || content.trim().isEmpty()) {
-            logger.warn("【Service】バリデーションエラー: 内容が空です");
-            return false;
-        }
-        if (writer == null || writer.trim().isEmpty()) {
-            logger.warn("【Service】バリデーションエラー: 作成者が空です");
-            return false;
-        }
-        return true;
     }
 }

@@ -11,10 +11,11 @@ import org.apache.struts2.ServletActionContext;
 
 import com.opensymphony.xwork2.ActionSupport;
 
-import dao.BoardDao;
 import dao.CommentDao;
-// 掲示板データを管理するBoardクラスをインポート
-import model.BoardData;
+import dto.request.BoardCreateRequest;
+import dto.request.BoardUpdateRequest;
+import dto.response.BoardDetailResponse;
+import dto.response.BoardListResponse;
 import model.CommentData;
 import model.FileInfo;
 import service.BoardService;
@@ -106,21 +107,9 @@ public class BoardAction extends ActionSupport {
 	 * 【投稿者のIPアドレスを保持するフィールド】
 	 * JSPの <input type="hidden" name="remoteAddress"/> と対応
 	 */
-
-	private List<BoardData> data;
-	/*
-	 * 【掲示板データ全体を保持するフィールド】
-	 * 
-	 * 使用目的:
-	 * - Boardクラスから取得したデータをJSPに渡すための橋渡し役
-	 * - execute()やupdate()メソッドでBoardから取得したデータを格納
-	 * - JSPで <s:iterator value="data"> として参照される
-	 * 
-	 * データの流れ:
-	 * Board.getChatData() → このdataフィールド → JSPのValueStack → 画面表示
-	 */
-
-	private BoardData item; // 詳細表示用
+	
+	private List<BoardListResponse> data;        // 一覧用
+    private BoardDetailResponse item;            // 詳細用
 
 	private List<CommentData> comments; // コメントリスト
     
@@ -248,30 +237,19 @@ public class BoardAction extends ActionSupport {
 		this.ipAdress = ipAddress;
 	}
 
-	/**
-	 * 掲示板データ全体を取得
-	 * @return 掲示板データのリスト
-	 * 
-	 * 【JSPでの使用】
-	 * <s:iterator value="data"> でこのgetData()が呼ばれる
-	 */
-	public List<BoardData> getData() {
-		return data;
-	}
+	public List<BoardListResponse> getData() {
+        return data;
+    }
 
-	/**
-	 * 掲示板データ全体を設定
-	 * @param data 掲示板データのリスト
-	 */
-	public void setData(List<BoardData> data) {
-		this.data = data;
-	}
-	
-    public BoardData getItem() {
+    public void setData(List<BoardListResponse> data) {
+        this.data = data;
+    }
+    
+    public BoardDetailResponse getItem() {
         return item;
     }
     
-    public void setItem(BoardData item) {
+    public void setItem(BoardDetailResponse item) {
         this.item = item;
     }
     
@@ -325,11 +303,22 @@ public class BoardAction extends ActionSupport {
     
 	// ========== Actionメソッド ==========
 
-    // 一覧表示 (リスト画面)
+    /**
+     * 一覧表示 (リスト画面)
+     * 
+     * 呼び出しタイミング:
+     * - boardList.action
+     * 
+     * 処理の流れ:
+     * 1. ServiceからDTOリスト取得
+     * 2. dataフィールドに設定
+     * 3. JSPへ
+     */
     public String list() {
         logger.info("【一覧表示】list()メソッド開始");
         
         try {
+        	 // ServiceからDTOリスト取得
             data = boardService.getBoardList(category, searchKeyword);
             
             logger.debug("【一覧表示】投稿件数: " + data.size());
@@ -342,13 +331,16 @@ public class BoardAction extends ActionSupport {
         return "list";
     }
 
-    /**
+    /*
+     * 掲示板詳細照会
      * 
-     * @return
+     * 呼び出しタイミング:
+     * - boardDetail.action?boardId=1
      */
     public String detail() {
         logger.info("【詳細表示】detail()メソッド開始 - boardId: " + boardId);
         
+        // ServiceからDTO取得
         item = boardService.getBoardDetail(boardId);
         
         if (item != null) {
@@ -367,32 +359,24 @@ public class BoardAction extends ActionSupport {
         return "input";
     }
     
-	/**
-	 * 【executeメソッド - デフォルトのアクションメソッド】
-	 * 
-	 * 呼び出しタイミング:
-	 * - JSPで <s:submit value="投稿"/> がクリックされた時
-	 * - <s:form action="board.action"> が送信された時
-	 * - method属性が指定されていない場合のデフォルトメソッド
-	 * 
-	 * 処理の流れ:
-	 * 1. isValid()メソッドで入力値をチェック
-	 * 2. 入力が正しい場合:
-	 *    - Board.addChatData()を呼んで新しい投稿を追加
-	 *    - 追加後の全データをdataフィールドに格納
-	 * 3. 入力にエラーがある場合:
-	 *    - 投稿は追加せず、現在のデータのみを取得
-	 *    - エラーメッセージはJSPの<s:actionerror/>で表示される
-	 * 4. "success"を返してboard.jspを表示
-	 * 
-	 * @return 処理結果を表す文字列（"success"）
+	/*
+	 * 掲示板生成（新規投稿）
+     * 
+     * 呼び出しタイミング:
+     * - JSPで <s:submit value="投稿"/> がクリックされた時
+     * 
+     * 処理の流れ:
+     * 1. 入力値検証
+     * 2. ファイルアップロード処理
+     * 3. Request DTO生成
+     * 4. Service呼び出し
 	 */
     public String execute() {
         logger.info("【新規投稿】execute()メソッド開始");
         logger.debug("【新規投稿】writer: " + writer + ", title: " + title);
         
         if (isValid()) {
-            // ファイル処理
+            // 1. ファイルアップロード処理
         	FileInfo fileInfo = null;
 
         	if (upload != null) {
@@ -410,18 +394,22 @@ public class BoardAction extends ActionSupport {
                 }
             }
         	
-            // 投稿データ保存
-        	boolean success;
+        	// 2. Request DTO生成
+            BoardCreateRequest request;
+            
             if (fileInfo != null) {
-                success = boardService.createBoard(
-                    category, title, content, writer, ipAdress,
-                    fileInfo.getFileName(), fileInfo.getFilePath(), fileInfo.getFileSize()
+            	request = new BoardCreateRequest(
+                        category, title, content, writer, ipAdress,
+                        fileInfo.getFileName(), fileInfo.getFilePath(), fileInfo.getFileSize()
                 );
             } else {
-                success = boardService.createBoard(
-                    category, title, content, writer, ipAdress
+            	request = new BoardCreateRequest(
+                        category, title, content, writer, ipAdress
                 );
             }
+            
+            // 3. Service呼び出し
+            boolean success = boardService.createBoard(request);
             
             if (success) {
                 logger.debug("【新規投稿】投稿成功 - writer: " + writer);
@@ -437,24 +425,11 @@ public class BoardAction extends ActionSupport {
 
     }
 
-	/**
-	 * 【updateメソッド - 更新専用のアクションメソッド】
-	 * 
-	 * 呼び出しタイミング:
-	 * - JSPで <s:submit value="更新" method="update"/> がクリックされた時
-	 * - method属性で"update"が指定されているため、
-	 *   execute()ではなくこのメソッドが呼ばれる
-	 * 
-	 * 処理内容:
-	 * - 掲示板の最新データを取得するだけ
-	 * - 新しい投稿は追加しない
-	 * - バリデーションも行わない（チェック不要）
-	 * 
-	 * 使用目的:
-	 * - 他のユーザーが投稿した最新データを確認したい時
-	 * - ページをリロードせずに最新情報を取得したい時
-	 * 
-	 * @return 処理結果を表す文字列（"success"）
+	/*
+     * 修正フォーム表示
+     * 
+     * 呼び出しタイミング:
+     * - boardEditForm.action?boardId=1
 	 */
     public String editForm() {
         logger.info("【編集フォーム】editForm()メソッド開始 - boardId: " + boardId);
@@ -462,28 +437,28 @@ public class BoardAction extends ActionSupport {
         item = boardService.getBoardForEdit(boardId);
         
         if (item != null) {
-            // 既存データをフィールドに設定
+            // DTOデータをフィールドに設定（フォーム初期値）
             this.category = item.getCategory();
             this.title = item.getTitle();
             this.content = item.getContent();
             this.writer = item.getWriter();
+            
             logger.debug("【編集フォーム】編集画面表示 - boardId: " + boardId);
             return "edit";
         } else {
             logger.error("【編集フォーム】投稿が見つかりませんでした - boardId: " + boardId);
             addActionError("投稿が見つかりませんでした");
-            data = BoardDao.getChatData();
+            data = boardService.getBoardList(null, null);
             return "list";
         }
     }
 
     
-    /**
-     * 編集アクション：投稿を更新する
-     * - 既存の投稿内容を変更できるようにする
-     * 【呼び出し元】
-     * board.jspの編集フォーム：action="boardEdit.action"
-     * @return "success"を返してboard.jspを表示
+    /*
+     * 掲示板修正
+     * 
+     * 呼び出しタイミング:
+     * - boardEdit.action
      */
     public String edit() {
         logger.info("【編集】edit()メソッド開始 - boardId: " + boardId);
@@ -491,7 +466,7 @@ public class BoardAction extends ActionSupport {
         if (title != null && content != null && writer != null &&
             !title.equals("") && !content.equals("") && !writer.equals("")) {
             
-            // ファイル処理
+        	// 1. ファイルアップロード処理
         	FileInfo fileInfo = null;
 
         	if (upload != null) {
@@ -509,18 +484,21 @@ public class BoardAction extends ActionSupport {
                 }
             }
             
-            // 投稿データ保存
-        	boolean success;
+        	// 2. Request DTO生成
+            BoardUpdateRequest request;
             if (fileInfo != null) {
-                success = boardService.updateBoard(
+                request = new BoardUpdateRequest(
                     boardId, category, title, content, writer,
                     fileInfo.getFileName(), fileInfo.getFilePath(), fileInfo.getFileSize()
                 );
             } else {
-                success = boardService.updateBoard(
+                request = new BoardUpdateRequest(
                     boardId, category, title, content, writer
                 );
             }
+            
+            // 3. Service呼び出し
+            boolean success = boardService.updateBoard(request);
             
             if (success) {
                 logger.debug("【編集】更新成功 - boardId: " + boardId);
@@ -532,24 +510,22 @@ public class BoardAction extends ActionSupport {
             logger.error("【編集】入力値エラー");
             addActionError("すべて入力してください");
         }
-        
         data = boardService.getBoardList(null, null);
         return "list";
 
     }
 
 
-    /**
-     * 削除アクション：投稿を削除する
-     * - 不要な投稿を削除できるようにする
-     * 【呼び出し元】
-     * board.jspの削除フォーム：action="boardDelete.action"
-     * @return "success"を返してboard.jspを表示
+    /*
+     * 掲示板削除
+     * 
+     * 呼び出しタイミング:
+     * - boardDelete.action?boardId=1
      */
     public String delete() {
         logger.info("【削除】delete()メソッド開始 - boardId: " + boardId);
         
-        // 投稿データ削除
+        // Service呼び出し
         boolean success = boardService.deleteBoard(boardId);
         
         if (!success) {
@@ -562,28 +538,16 @@ public class BoardAction extends ActionSupport {
         return "list";
     }
 
-
+    /*
+	 * 入力値検証
+	 * 
+	 * 検証項目:
+	 * - タイトル必須
+	 * - 名前必須
+	 * - 内容必須
+	 */
 	public boolean isValid() {
-		/*
-		 * 【バリデーションの実装パターン】
-		 * 
-		 * パターン1: validate()メソッドをオーバーライド（今回不採用）
-		 * public void validate() {
-		 *     // 全てのアクションメソッドで実行される
-		 * }
-		 * 
-		 * パターン2: カスタムメソッドを作成（今回採用）
-		 * public boolean isValid() {
-		 *     // 必要な時だけ呼び出せる
-		 * }
-		 * 
-		 * パターン3: XMLバリデーション
-		 * BoardAction-validation.xmlファイルで定義
-		 * 
-		 * パターン4: アノテーションバリデーション
-		 * @RequiredStringValidator(message="必須です")
-		 */
-
+		
 		if (title == null || title.equals("")) {
 			logger.error("【バリデーション】タイトル未入力");
             addActionError("タイトルを入力してください");
@@ -645,11 +609,17 @@ public class BoardAction extends ActionSupport {
 		 */
 	}
 	
+	/*
+     * ファイルダウンロード
+     * 
+     * 呼び出しタイミング:
+     * - boardDownload.action?boardId=1
+     */
     public String download() {
         logger.info("【ファイルダウンロード】boardId: " + boardId);
         
         try {
-            // 掲示板情報照会
+        	// ServiceからDTO照会
         	item = boardService.getBoardForEdit(boardId);
             
             if (item == null || !item.hasFile()) {
@@ -670,7 +640,7 @@ public class BoardAction extends ActionSupport {
                     return ERROR;
                 }
                 
-                // 3. InputStreamとファイル名を設定
+                // InputStreamとファイル名を設定
                 this.inputStream = new FileInputStream(file);
                 this.fileName = item.getFileName();
                 

@@ -8,7 +8,7 @@ import java.sql.Statement;
 import java.util.ArrayList;
 import java.util.List;
 
-import model.BoardData;
+import entity.BoardEntity;
 import util.DBConnection;
 
 /**
@@ -30,7 +30,7 @@ public class BoardDao {
 	private static DBConnection dbConnection = DBConnection.getInstance();
 
     /**
-     * 【addChatData メソッド】
+     * 【insert メソッド】
      * 掲示板に新しい投稿を追加する
      * 
      * @param category カテゴリ（自由/お知らせ/質問/設問）
@@ -51,8 +51,8 @@ public class BoardDao {
      * 5. 結果を確認
      * 6. リソースをクローズ
      */
-    public static boolean addChatData(String category, String title, String content, 
-            String writer, String ipAddress,String fileName, String filePath, long fileSize) {
+    public static boolean insert(String category, String title, String content, 
+            String writer, String ipAddress,String fileName, String filePath, Long fileSize) {
         // INSERT文の準備
         // public.board_data: publicスキーマのboard_dataテーブル
         String sql = "INSERT INTO board_data (category, title, content, writer, ip_address, file_name, file_path, file_size) " +
@@ -99,8 +99,8 @@ public class BoardDao {
             pstmt.setString(5, ipAddress);  // 5番目 → ipAddress
             pstmt.setString(6, fileName);
             pstmt.setString(7, filePath);
-            pstmt.setLong(8, fileSize);
-            
+            pstmt.setLong(8, fileSize != null ? fileSize : 0);
+
             /*
              * setString(index, value):
              * - index: 〇番の位置（1から始まる）
@@ -139,18 +139,10 @@ public class BoardDao {
     }
     
     /**
-     * 既存のメソッド (ファイルなしで投稿) - 下位互換性を維持
-     */
-    public static boolean addChatData(String category, String title, String content,
-                                     String writer, String ipAddress) {
-        return addChatData(category, title, content, writer, ipAddress, null, null, 0);
-    }
-    
-    /**
-     * 【getChatData メソッド】
+     * 【findAll メソッド】
      * 掲示板データ全体を取得（新しい順）
      * 
-     * @return 投稿データのリスト（List<BoardData>）
+     * @return 投稿データのリスト（List<BoardEntity>）
      * 
      * 処理の流れ:
      * 1. SQL SELECT文を準備
@@ -161,7 +153,7 @@ public class BoardDao {
      * 6. リソースをクローズ
      * 7. リストを返す
      */
-    public static List<BoardData> getChatData() {
+    public static List<BoardEntity> findAll() {
 
     	String sql = "SELECT * " +
                 "FROM board_data " +
@@ -174,7 +166,7 @@ public class BoardDao {
         Connection conn = null;      // データベース接続
         Statement stmt = null;       // SQL実行オブジェクト
         ResultSet rs = null;         // 検索結果
-        List<BoardData> dataList = new ArrayList<>();  // 結果を格納するリスト
+        List<BoardEntity> entityList = new ArrayList<>();  // 結果を格納するリスト
         /*
          * ArrayList<BoardData>:
          * - BoardDataオブジェクトを格納する可変長配列
@@ -213,58 +205,16 @@ public class BoardDao {
                  * - 最初の呼び出しで1行目に移動
                  */
                 
-                // 新しいBoardDataオブジェクトを作成
-                BoardData data = new BoardData();
-                
-                // ResultSetから各カラムの値を取得してセット
-                data.setBoardId(rs.getLong("board_id"));                
+            	BoardEntity entity = mapResultSetToEntity(rs);
                 /*
-                 * rs.getLong("カラム名"):
-                 * - 指定されたカラムの値をlong型で取得
-                 * - カラム名で指定（インデックスでも可）
+                 * mapResultSetToEntity作成理由
+                 * DRY 原則(Don't Repeat Yourself)
+                 * メンテナンス性の向上
+                 * エラー低減
+                 * コード可読性の向上
                  */
-                
-                data.setCategory(rs.getString("category"));
-                data.setTitle(rs.getString("title"));
-                data.setContent(rs.getString("content"));
-                data.setWriter(rs.getString("writer"));
-                /*
-                 * rs.getString("カラム名"):
-                 * - 指定されたカラムの値をString型で取得
-                 */
-
-                // カウント
-                data.setViewCount(rs.getInt("view_count"));
-                data.setLikeCount(rs.getInt("like_count"));
-                data.setDislikeCount(rs.getInt("dislike_count"));
-                /*
-                 * rs.getInt("カラム名"):
-                 * - INTEGER型の値を取得
-                 */
-                
-                // IPアドレス
-                data.setIpAddress(rs.getString("ip_address"));
-                
-                // Boolean型のフラグ
-                data.setSecret(rs.getBoolean("is_secret"));
-                data.setDeleted(rs.getBoolean("is_deleted"));
-                
-                // File関連
-                data.setFileName(rs.getString("file_name"));
-                data.setFilePath(rs.getString("file_path"));
-                data.setFileSize(rs.getLong("file_size"));
-                
-                // Timestamp型で取得（日付時刻）
-                data.setCreatedAt(rs.getTimestamp("created_at"));
-                data.setUpdatedAt(rs.getTimestamp("updated_at"));
-                /*
-                 * Timestamp型:
-                 * - データベースの日時型
-                 * - toString()で文字列に変換
-                 */
-                
-                // リストに追加
-                dataList.add(data);
+            	
+            	entityList.add(entity);
             }
             
         } catch (SQLException e) {
@@ -278,7 +228,7 @@ public class BoardDao {
         }
         
         // 取得したリストを返す（空の場合もあり）
-        return dataList;
+        return entityList;
     }
     
     /**
@@ -288,7 +238,7 @@ public class BoardDao {
      * @param id 取得したい投稿のID
      * @return 見つかった投稿データ、見つからない場合はnull
      */
-    public static BoardData getDataById(long id) {
+    public static BoardEntity findById(long boardId) {
         // WHERE句でID指定
     	String sql = "SELECT * FROM board_data WHERE board_id = ? AND is_deleted = FALSE";
         
@@ -298,11 +248,11 @@ public class BoardDao {
         
         try {
             // 1. データベースに接続
-            conn = dbConnection.getConnection();
+        	conn = dbConnection.getConnection();
             
             // 2. SQL準備
-            pstmt = conn.prepareStatement(sql);
-            pstmt.setLong(1, id);  // ?にIDを設定
+        	pstmt = conn.prepareStatement(sql);
+        	pstmt.setLong(1, boardId);  // IDを設定
             /*
              * setInt(index, value):
              * - int型の値を設定
@@ -310,32 +260,13 @@ public class BoardDao {
              */
             
             // 3. SQL実行
-            rs = pstmt.executeQuery();
+        	rs = pstmt.executeQuery();
             
             // 4. 結果を確認（1件のみ取得）
             if (rs.next()) {
-                // データが見つかった場合
-                BoardData data = new BoardData();
-                data.setBoardId(rs.getLong("board_id"));
-                data.setCategory(rs.getString("category"));
-                data.setTitle(rs.getString("title"));
-                data.setContent(rs.getString("content"));
-                data.setWriter(rs.getString("writer"));
-                data.setViewCount(rs.getInt("view_count"));
-                data.setLikeCount(rs.getInt("like_count"));
-                data.setDislikeCount(rs.getInt("dislike_count"));
-                data.setIpAddress(rs.getString("ip_address"));
-                data.setSecret(rs.getBoolean("is_secret"));
-                data.setDeleted(rs.getBoolean("is_deleted"));
-                data.setFileName(rs.getString("file_name"));
-                data.setFilePath(rs.getString("file_path"));
-                data.setFileSize(rs.getLong("file_size"));
-                data.setCreatedAt(rs.getTimestamp("created_at"));
-                data.setUpdatedAt(rs.getTimestamp("updated_at"));
-                
-                return data;  // 見つかったデータを返す
+            	// データが見つかった場合
+                return mapResultSetToEntity(rs);
             }
-            // rs.next()がfalseの場合、データなし
             
         } catch (SQLException e) {
             System.out.println("getDataById SQLException エラー");
@@ -367,8 +298,8 @@ public class BoardDao {
      * - 指定されたIDの投稿を更新
      * - post_dateも現在時刻に更新される
      */
-    public static boolean updateData(long boardId, String category, String title, 
-            String content, String writer, String fileName, String filePath, long fileSize) {
+    public static boolean update(long boardId, String category, String title, 
+    		String writer, String content, String fileName, String filePath, Long fileSize) {
         // UPDATE文の準備
         // WHERE id = ?: 指定されたIDの行のみ更新
     	
@@ -409,7 +340,7 @@ public class BoardDao {
             if (fileName != null && !fileName.isEmpty()) {
                 pstmt.setString(5, fileName);
                 pstmt.setString(6, filePath);
-                pstmt.setLong(7, fileSize);
+                pstmt.setLong(7, fileSize != null ? fileSize : 0);
                 pstmt.setLong(8, boardId);
             } else {
                 pstmt.setLong(5, boardId);
@@ -443,21 +374,13 @@ public class BoardDao {
     }
     
     /**
-     * 既存のメソッド (ファイルなしで更新)
-     */
-    public static boolean updateData(long boardId, String category, String title,
-                                    String content, String writer) {
-        return updateData(boardId, category, title, content, writer, null, null, 0);
-    }
-    
-    /**
      * 【deleteData メソッド】
      * 投稿を削除する
      * 
      * @param id 削除対象の投稿ID
      * @return 成功時true、失敗時false
      */
-    public static boolean deleteData(long id) {
+    public static boolean delete(long boardId) {
         // DELETE文の準備
         String sql = "UPDATE board_data SET is_deleted = TRUE " +
                 "WHERE board_id = ? AND is_deleted = FALSE";
@@ -476,7 +399,7 @@ public class BoardDao {
             
             // 2. SQL準備
             pstmt = conn.prepareStatement(sql);
-            pstmt.setLong(1, id);  // WHERE id = ?
+            pstmt.setLong(1, boardId);  // WHERE id = ?
             
             // 3. SQL実行
             int result = pstmt.executeUpdate();
@@ -510,7 +433,7 @@ public class BoardDao {
      * - 詳細画面を表示した時に呼ばれる
      * - 閲覧数をカウントアップ
      */
-    public static void incrementViewCount(long id) {
+    public static void incrementViewCount(long boardId) {
         // view_count を +1 するSQL
         String sql = "UPDATE board_data SET view_count = view_count + 1 " +
                 "WHERE board_id = ? AND is_deleted = FALSE";
@@ -526,7 +449,7 @@ public class BoardDao {
         try {
             conn = dbConnection.getConnection();
             pstmt = conn.prepareStatement(sql);
-            pstmt.setLong(1, id);
+            pstmt.setLong(1, boardId);
             
             pstmt.executeUpdate();
             // 戻り値をチェックしない（失敗してもエラー表示のみ）
@@ -538,6 +461,41 @@ public class BoardDao {
         } finally {
             closeResources(conn, pstmt, null);
         }
+    }
+    
+    /**
+     * 【mapResultSetToEntityメソッド】
+     * ResultSetをEntityに変換
+     * 
+     * @param rs ResultSet
+     * @return BoardEntity
+     * @throws SQLException
+     * 
+     * 使用箇所:
+     * - findAll()、findById()でデータ取得時に使用
+     * - コード重複を避けるための共通メソッド
+     */
+    private static BoardEntity mapResultSetToEntity(ResultSet rs) throws SQLException {
+        BoardEntity entity = new BoardEntity();
+        
+        entity.setBoardId(rs.getLong("board_id"));
+        entity.setCategory(rs.getString("category"));
+        entity.setTitle(rs.getString("title"));
+        entity.setContent(rs.getString("content"));
+        entity.setWriter(rs.getString("writer"));
+        entity.setViewCount(rs.getInt("view_count"));
+        entity.setLikeCount(rs.getInt("like_count"));
+        entity.setDislikeCount(rs.getInt("dislike_count"));
+        entity.setIpAddress(rs.getString("ip_address"));
+        entity.setIsSecret(rs.getBoolean("is_secret"));
+        entity.setIsDeleted(rs.getBoolean("is_deleted"));
+        entity.setFileName(rs.getString("file_name"));
+        entity.setFilePath(rs.getString("file_path"));
+        entity.setFileSize(rs.getLong("file_size"));
+        entity.setCreatedAt(rs.getTimestamp("created_at"));
+        entity.setUpdatedAt(rs.getTimestamp("updated_at"));
+        
+        return entity;
     }
     
     /**
