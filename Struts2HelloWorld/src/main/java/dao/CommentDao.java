@@ -1,18 +1,15 @@
 package dao;
 
-import java.sql.Connection;
-import java.sql.PreparedStatement;
-import java.sql.ResultSet;
-import java.sql.SQLException;
-import java.sql.Types;
 import java.util.ArrayList;
 import java.util.List;
 
+import org.apache.ibatis.session.SqlSession;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
+import mapper.CommentMapper;
 import model.CommentData;
-import util.DBConnection;
+import util.MyBatisUtil;
 
 /**
  * 【Commentクラス】
@@ -30,57 +27,37 @@ public class CommentDao {
     
     // ========== ロガー ==========
     private static final Logger logger = LogManager.getLogger(CommentDao.class);
-    private static DBConnection dbConnection = DBConnection.getInstance();
-    
+
     /**
      * コメント追加
      * @param comment コメントデータ
      * @return 成功した場合true、失敗した場合false
      */
     public static boolean addComment(CommentData comment) {
-        logger.info("【コメント追加】addComment開始");
+    	
+    	logger.info("【コメント追加】addComment開始");
         logger.debug("【コメント追加】board_id: " + comment.getBoardId() + 
                     ", writer: " + comment.getWriter());
         
-        String sql = "INSERT INTO comment_data (board_id, writer, content, parent_comment_id, ip_address) " +
-                     "VALUES (?, ?, ?, ?, ?::inet)";
-        
-        try (Connection conn = dbConnection.getConnection();
-             PreparedStatement pstmt = conn.prepareStatement(sql)) {
-            
-            pstmt.setLong(1, comment.getBoardId());
-            pstmt.setString(2, comment.getWriter());
-            pstmt.setString(3, comment.getContent());
-            
-            // 親コメントID（返信の場合のみ値あり）
-            if (comment.getParentCommentId() != null) {
-                pstmt.setLong(4, comment.getParentCommentId());
-            } else {
-                pstmt.setNull(4, Types.BIGINT);
-            }
-            
-            // IPアドレス（空文字列の場合はNULL）
-            String ipAddr = comment.getIpAddress();
-            if (ipAddr != null && !ipAddr.trim().isEmpty()) {
-                pstmt.setString(5, ipAddr);
-            } else {
-                pstmt.setNull(5, Types.OTHER);  // INET型はTypes.OTHER
-            }
-            
-            int result = pstmt.executeUpdate();
-            
-            if (result > 0) {
-                logger.debug("【コメント追加】追加成功 - board_id: " + comment.getBoardId());
-                return true;
-            } else {
-                logger.warn("【コメント追加】追加失敗");
-                return false;
-            }
-            
-        } catch (SQLException e) {
-            logger.error("【コメント追加】SQLException エラー", e);
-            return false;
+        // 返信コメントの場合
+        if (comment.getParentCommentId() != null) {
+            return addReply(
+                comment.getBoardId(),
+                comment.getWriter(),
+                comment.getContent(),
+                comment.getParentCommentId(),
+                comment.getIpAddress()
+            );
         }
+        
+        // 通常コメントの場合
+        return addComment(
+            comment.getBoardId(),
+            comment.getWriter(),
+            comment.getContent(),
+            comment.getIpAddress()
+        );
+
     }
     
     /**
@@ -92,13 +69,52 @@ public class CommentDao {
      * @return 成功した場合true
      */
     public static boolean addComment(long boardId, String writer, String content, String ipAddress) {
-        CommentData comment = new CommentData();
-        comment.setBoardId(boardId);
-        comment.setWriter(writer);
-        comment.setContent(content);
-        comment.setIpAddress(ipAddress);
+    	
+    	logger.info("【コメント追加】addComment開始 - board_id: " + boardId);
         
-        return addComment(comment);
+        SqlSession sqlSession = null;
+        
+        try {
+            // 1. SqlSession取得 (autoCommit = false)
+            sqlSession = MyBatisUtil.getSqlSession();
+            /*
+             * autoCommit = false:
+             * - 明示的にcommit()を呼ぶまでDBに反映されない
+             * - エラー時にrollback()可能
+             */
+            
+            // 2. Mapper取得
+            CommentMapper mapper = sqlSession.getMapper(CommentMapper.class);
+            
+            // 3. INSERT実行
+            int result = mapper.addComment(boardId, writer, content, ipAddress);
+            /*
+             * mapper.addComment()の動作:
+             * 1. CommentMapper.xmlのaddComment SQLを実行
+             * 2. parent_comment_id = NULL を設定
+             * 3. ipAddressが空の場合はNULLを設定（動的SQL）
+             * 4. PostgreSQLのCAST(? AS inet)も処理
+             */
+            
+            // 4. コミット（重要！）
+            sqlSession.commit();
+            
+            logger.debug("【コメント追加】追加成功 - board_id: " + boardId);
+            
+            return result > 0;
+            
+        } catch (Exception e) {
+            // エラー時の処理
+            if (sqlSession != null) {
+                sqlSession.rollback();
+            }
+            logger.error("【コメント追加】SQLException エラー", e);
+            return false;
+            
+        } finally {
+            MyBatisUtil.closeSqlSession(sqlSession);
+        }
+
     }
     
     /**
@@ -112,14 +128,41 @@ public class CommentDao {
      */
     public static boolean addReply(long boardId, String writer, String content, 
                                    long parentCommentId, String ipAddress) {
-        CommentData comment = new CommentData();
-        comment.setBoardId(boardId);
-        comment.setWriter(writer);
-        comment.setContent(content);
-        comment.setParentCommentId(parentCommentId);
-        comment.setIpAddress(ipAddress);
+    	
+    	logger.info("【返信追加】addReply開始 - parent_comment_id: " + parentCommentId);
         
-        return addComment(comment);
+        SqlSession sqlSession = null;
+        
+        try {
+            sqlSession = MyBatisUtil.getSqlSession();
+            CommentMapper mapper = sqlSession.getMapper(CommentMapper.class);
+            
+            // INSERT実行
+            int result = mapper.addReply(boardId, writer, content, parentCommentId, ipAddress);
+            /*
+             * mapper.addReply()の動作:
+             * 1. CommentMapper.xmlのaddReply SQLを実行
+             * 2. parent_comment_id に親コメントIDを設定
+             * 3. ORDER BYで親→子の順に表示される
+             */
+            
+            // コミット
+            sqlSession.commit();
+            
+            logger.debug("【返信追加】追加成功 - parent_comment_id: " + parentCommentId);
+            
+            return result > 0;
+            
+        } catch (Exception e) {
+            if (sqlSession != null) {
+                sqlSession.rollback();
+            }
+            logger.error("【返信追加】SQLException エラー", e);
+            return false;
+        } finally {
+            MyBatisUtil.closeSqlSession(sqlSession);
+        }
+
     }
     
     /**
@@ -128,55 +171,41 @@ public class CommentDao {
      * @return コメントリスト
      */
     public static List<CommentData> getCommentsByBoardId(long boardId) {
-        logger.info("【コメント取得】getCommentsByBoardId開始 - board_id: " + boardId);
+    	
+    	logger.info("【コメント取得】getCommentsByBoardId開始 - board_id: " + boardId);
         
-        List<CommentData> comments = new ArrayList<>();
+        SqlSession sqlSession = null;
         
-        // 親コメント → 子コメント の順に並べる
-        String sql = "SELECT comment_id, board_id, writer, content, " +
-                     "parent_comment_id, ip_address, is_deleted, created_at, updated_at " +
-                     "FROM comment_data " +
-                     "WHERE board_id = ? AND is_deleted = FALSE " +
-                     "ORDER BY " +
-                     "CASE WHEN parent_comment_id IS NULL THEN comment_id ELSE parent_comment_id END, " +
-                     "parent_comment_id NULLS FIRST, " +
-                     "created_at ASC";
-        
-        try (Connection conn = dbConnection.getConnection();
-             PreparedStatement pstmt = conn.prepareStatement(sql)) {
+        try {
+            sqlSession = MyBatisUtil.getSqlSession();
+            CommentMapper mapper = sqlSession.getMapper(CommentMapper.class);
             
-            pstmt.setLong(1, boardId);
-            
-            try (ResultSet rs = pstmt.executeQuery()) {
-                while (rs.next()) {
-                    CommentData comment = new CommentData();
-                    comment.setCommentId(rs.getLong("comment_id"));
-                    comment.setBoardId(rs.getLong("board_id"));
-                    comment.setWriter(rs.getString("writer"));
-                    comment.setContent(rs.getString("content"));
-                    
-                    // parent_comment_idはNULLの可能性あり
-                    long parentId = rs.getLong("parent_comment_id");
-                    if (!rs.wasNull()) {
-                        comment.setParentCommentId(parentId);
-                    }
-                    
-                    comment.setIpAddress(rs.getString("ip_address"));
-                    comment.setDeleted(rs.getBoolean("is_deleted"));
-                    comment.setCreatedAt(rs.getTimestamp("created_at"));
-                    comment.setUpdatedAt(rs.getTimestamp("updated_at"));
-                    
-                    comments.add(comment);
-                }
+            // コメント一覧取得
+            /*
+             * 実行される処理:
+             * 1. CommentMapper.xmlのgetCommentsByBoardId SQLを実行
+             * 2. ResultSetを自動的にList<CommentData>に変換
+             * 3. parent_comment_idの階層構造を維持して取得
+             * 4. 親コメント → 子コメント の順
+             */
+            List<CommentData> comments = mapper.getCommentsByBoardId(boardId);
+            if (comments == null) {
+                logger.debug("【コメント取得】コメントなし - 空のリスト返却");
+                return new ArrayList<>();
             }
             
-            logger.debug("【コメント取得】取得成功 - 件数: " + comments.size());
+            logger.debug("【コメント取得】取得成功 - 件数: " + (comments != null ? comments.size() : 0));
             
-        } catch (SQLException e) {
+            return comments;
+            
+        } catch (Exception e) {
             logger.error("【コメント取得】SQLException エラー - board_id: " + boardId, e);
+            return new ArrayList<>();
+            
+        } finally {
+            MyBatisUtil.closeSqlSession(sqlSession);
         }
-        
-        return comments;
+
     }
     
     /**
@@ -185,47 +214,32 @@ public class CommentDao {
      * @return コメントデータ（見つからない場合はnull）
      */
     public static CommentData getCommentById(long commentId) {
-        logger.info("【コメント取得】getCommentById開始 - comment_id: " + commentId);
+    	
+    	logger.info("【コメント取得】getCommentById開始 - comment_id: " + commentId);
         
-        String sql = "SELECT comment_id, board_id, writer, content, " +
-                     "parent_comment_id, ip_address, is_deleted, created_at, updated_at " +
-                     "FROM comment_data " +
-                     "WHERE comment_id = ? AND is_deleted = FALSE";
+        SqlSession sqlSession = null;
         
-        try (Connection conn = dbConnection.getConnection();
-             PreparedStatement pstmt = conn.prepareStatement(sql)) {
+        try {
+            sqlSession = MyBatisUtil.getSqlSession();
+            CommentMapper mapper = sqlSession.getMapper(CommentMapper.class);
             
-            pstmt.setLong(1, commentId);
+            CommentData comment = mapper.getCommentById(commentId);
             
-            try (ResultSet rs = pstmt.executeQuery()) {
-                if (rs.next()) {
-                    CommentData comment = new CommentData();
-                    comment.setCommentId(rs.getLong("comment_id"));
-                    comment.setBoardId(rs.getLong("board_id"));
-                    comment.setWriter(rs.getString("writer"));
-                    comment.setContent(rs.getString("content"));
-                    
-                    long parentId = rs.getLong("parent_comment_id");
-                    if (!rs.wasNull()) {
-                        comment.setParentCommentId(parentId);
-                    }
-                    
-                    comment.setIpAddress(rs.getString("ip_address"));
-                    comment.setDeleted(rs.getBoolean("is_deleted"));
-                    comment.setCreatedAt(rs.getTimestamp("created_at"));
-                    comment.setUpdatedAt(rs.getTimestamp("updated_at"));
-                    
-                    logger.debug("【コメント取得】取得成功 - comment_id: " + commentId);
-                    return comment;
-                }
+            if (comment != null) {
+                logger.debug("【コメント取得】取得成功 - comment_id: " + commentId);
+            } else {
+                logger.warn("【コメント取得】コメントが見つかりません - comment_id: " + commentId);
             }
             
-        } catch (SQLException e) {
+            return comment;
+            
+        } catch (Exception e) {
             logger.error("【コメント取得】SQLException エラー - comment_id: " + commentId, e);
+            return null;
+        } finally {
+            MyBatisUtil.closeSqlSession(sqlSession);
         }
-        
-        logger.warn("【コメント取得】コメントが見つかりません - comment_id: " + commentId);
-        return null;
+
     }
     
     /**
@@ -235,18 +249,20 @@ public class CommentDao {
      * @return 成功した場合true
      */
     public static boolean updateComment(long commentId, String content) {
-        logger.info("【コメント更新】updateComment開始 - comment_id: " + commentId);
         
-        String sql = "UPDATE comment_data SET content = ?, updated_at = CURRENT_TIMESTAMP " +
-                     "WHERE comment_id = ? AND is_deleted = FALSE";
+    	logger.info("【コメント更新】updateComment開始 - comment_id: " + commentId);
         
-        try (Connection conn = dbConnection.getConnection();
-             PreparedStatement pstmt = conn.prepareStatement(sql)) {
+        SqlSession sqlSession = null;
+        
+        try {
+            sqlSession = MyBatisUtil.getSqlSession();
+            CommentMapper mapper = sqlSession.getMapper(CommentMapper.class);
             
-            pstmt.setString(1, content);
-            pstmt.setLong(2, commentId);
+            // UPDATE実行
+            int result = mapper.updateComment(commentId, content);
             
-            int result = pstmt.executeUpdate();
+            // コミット
+            sqlSession.commit();
             
             if (result > 0) {
                 logger.debug("【コメント更新】更新成功 - comment_id: " + commentId);
@@ -256,10 +272,16 @@ public class CommentDao {
                 return false;
             }
             
-        } catch (SQLException e) {
+        } catch (Exception e) {
+            if (sqlSession != null) {
+                sqlSession.rollback();
+            }
             logger.error("【コメント更新】SQLException エラー - comment_id: " + commentId, e);
             return false;
+        } finally {
+            MyBatisUtil.closeSqlSession(sqlSession);
         }
+
     }
     
     /**
@@ -268,17 +290,28 @@ public class CommentDao {
      * @return 成功した場合true
      */
     public static boolean deleteComment(long commentId) {
-        logger.info("【コメント削除】deleteComment開始 - comment_id: " + commentId);
+    	
+    	logger.info("【コメント削除】deleteComment開始 - comment_id: " + commentId);
         
-        String sql = "UPDATE comment_data SET is_deleted = TRUE, updated_at = CURRENT_TIMESTAMP " +
-                     "WHERE comment_id = ?";
+        SqlSession sqlSession = null;
         
-        try (Connection conn = dbConnection.getConnection();
-             PreparedStatement pstmt = conn.prepareStatement(sql)) {
+        try {
+            sqlSession = MyBatisUtil.getSqlSession();
+            CommentMapper mapper = sqlSession.getMapper(CommentMapper.class);
             
-            pstmt.setLong(1, commentId);
+            // 論理削除実行
+            int result = mapper.deleteComment(commentId);
+            /*
+             * DELETE文の構造:
+             * UPDATE comment_data SET is_deleted = TRUE
+             * WHERE comment_id = #{commentId}
+             * 
+             * 注意: is_deleted = FALSE 条件なし
+             * → 既に削除済みでも再削除可能
+             */
             
-            int result = pstmt.executeUpdate();
+            // コミット
+            sqlSession.commit();
             
             if (result > 0) {
                 logger.debug("【コメント削除】削除成功 - comment_id: " + commentId);
@@ -288,10 +321,16 @@ public class CommentDao {
                 return false;
             }
             
-        } catch (SQLException e) {
+        } catch (Exception e) {
+            if (sqlSession != null) {
+                sqlSession.rollback();
+            }
             logger.error("【コメント削除】SQLException エラー - comment_id: " + commentId, e);
             return false;
+        } finally {
+            MyBatisUtil.closeSqlSession(sqlSession);
         }
+
     }
     
     /**
@@ -300,28 +339,33 @@ public class CommentDao {
      * @return コメント数
      */
     public static int getCommentCount(long boardId) {
-        logger.info("【コメント数取得】getCommentCount開始 - board_id: " + boardId);
+    	
+    	logger.info("【コメント数取得】getCommentCount開始 - board_id: " + boardId);
         
-        String sql = "SELECT COUNT(*) FROM comment_data " +
-                     "WHERE board_id = ? AND is_deleted = FALSE";
+        SqlSession sqlSession = null;
         
-        try (Connection conn = dbConnection.getConnection();
-             PreparedStatement pstmt = conn.prepareStatement(sql)) {
+        try {
+            sqlSession = MyBatisUtil.getSqlSession();
+            CommentMapper mapper = sqlSession.getMapper(CommentMapper.class);
             
-            pstmt.setLong(1, boardId);
+            int count = mapper.getCommentCount(boardId);
+            /*
+             * COUNT(*)の結果:
+             * - 削除されていないコメントの総数
+             * - 親コメント＋返信コメントすべて含む
+             * - 0以上の整数値
+             */
             
-            try (ResultSet rs = pstmt.executeQuery()) {
-                if (rs.next()) {
-                    int count = rs.getInt(1);
-                    logger.debug("【コメント数取得】取得成功 - board_id: " + boardId + ", count: " + count);
-                    return count;
-                }
-            }
+            logger.debug("【コメント数取得】取得成功 - board_id: " + boardId + ", count: " + count);
             
-        } catch (SQLException e) {
+            return count;
+            
+        } catch (Exception e) {
             logger.error("【コメント数取得】SQLException エラー - board_id: " + boardId, e);
+            return 0;
+        } finally {
+            MyBatisUtil.closeSqlSession(sqlSession);
         }
-        
-        return 0;
+
     }
 }

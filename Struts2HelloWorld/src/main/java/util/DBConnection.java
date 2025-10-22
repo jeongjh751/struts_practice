@@ -93,6 +93,10 @@ public class DBConnection {
         }
     }
     
+    public HikariDataSource getDataSource() {
+        return this.dataSource;
+    }
+    
     // shutdown: アプリケーション終了時にPoolを整理
     public void shutdown() {
         if (dataSource != null && !dataSource.isClosed()) {
