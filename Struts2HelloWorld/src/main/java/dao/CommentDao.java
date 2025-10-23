@@ -30,6 +30,7 @@ public class CommentDao {
 
     /**
      * コメント追加
+     * 
      * @param comment コメントデータ
      * @return 成功した場合true、失敗した場合false
      */
@@ -61,7 +62,8 @@ public class CommentDao {
     }
     
     /**
-     * コメント追加（簡易版）
+     * コメント追加
+     * 
      * @param boardId 投稿ID
      * @param writer 作成者
      * @param content 内容
@@ -75,28 +77,13 @@ public class CommentDao {
         SqlSession sqlSession = null;
         
         try {
-            // 1. SqlSession取得 (autoCommit = false)
+        	
             sqlSession = MyBatisUtil.getSqlSession();
-            /*
-             * autoCommit = false:
-             * - 明示的にcommit()を呼ぶまでDBに反映されない
-             * - エラー時にrollback()可能
-             */
             
-            // 2. Mapper取得
             CommentMapper mapper = sqlSession.getMapper(CommentMapper.class);
             
-            // 3. INSERT実行
             int result = mapper.addComment(boardId, writer, content, ipAddress);
-            /*
-             * mapper.addComment()の動作:
-             * 1. CommentMapper.xmlのaddComment SQLを実行
-             * 2. parent_comment_id = NULL を設定
-             * 3. ipAddressが空の場合はNULLを設定（動的SQL）
-             * 4. PostgreSQLのCAST(? AS inet)も処理
-             */
             
-            // 4. コミット（重要！）
             sqlSession.commit();
             
             logger.debug("【コメント追加】追加成功 - board_id: " + boardId);
@@ -104,7 +91,7 @@ public class CommentDao {
             return result > 0;
             
         } catch (Exception e) {
-            // エラー時の処理
+
             if (sqlSession != null) {
                 sqlSession.rollback();
             }
@@ -119,6 +106,7 @@ public class CommentDao {
     
     /**
      * 返信コメント追加
+     * 
      * @param boardId 投稿ID
      * @param writer 作成者
      * @param content 内容
@@ -137,16 +125,8 @@ public class CommentDao {
             sqlSession = MyBatisUtil.getSqlSession();
             CommentMapper mapper = sqlSession.getMapper(CommentMapper.class);
             
-            // INSERT実行
             int result = mapper.addReply(boardId, writer, content, parentCommentId, ipAddress);
-            /*
-             * mapper.addReply()の動作:
-             * 1. CommentMapper.xmlのaddReply SQLを実行
-             * 2. parent_comment_id に親コメントIDを設定
-             * 3. ORDER BYで親→子の順に表示される
-             */
             
-            // コミット
             sqlSession.commit();
             
             logger.debug("【返信追加】追加成功 - parent_comment_id: " + parentCommentId);
@@ -167,6 +147,7 @@ public class CommentDao {
     
     /**
      * 特定の投稿のコメント一覧取得
+     * 
      * @param boardId 投稿ID
      * @return コメントリスト
      */
@@ -180,14 +161,6 @@ public class CommentDao {
             sqlSession = MyBatisUtil.getSqlSession();
             CommentMapper mapper = sqlSession.getMapper(CommentMapper.class);
             
-            // コメント一覧取得
-            /*
-             * 実行される処理:
-             * 1. CommentMapper.xmlのgetCommentsByBoardId SQLを実行
-             * 2. ResultSetを自動的にList<CommentData>に変換
-             * 3. parent_comment_idの階層構造を維持して取得
-             * 4. 親コメント → 子コメント の順
-             */
             List<CommentData> comments = mapper.getCommentsByBoardId(boardId);
             if (comments == null) {
                 logger.debug("【コメント取得】コメントなし - 空のリスト返却");
@@ -210,6 +183,7 @@ public class CommentDao {
     
     /**
      * 特定のコメント取得
+     * 
      * @param commentId コメントID
      * @return コメントデータ（見つからない場合はnull）
      */
@@ -244,6 +218,7 @@ public class CommentDao {
     
     /**
      * コメント更新
+     * 
      * @param commentId コメントID
      * @param content 新しい内容
      * @return 成功した場合true
@@ -258,10 +233,8 @@ public class CommentDao {
             sqlSession = MyBatisUtil.getSqlSession();
             CommentMapper mapper = sqlSession.getMapper(CommentMapper.class);
             
-            // UPDATE実行
             int result = mapper.updateComment(commentId, content);
             
-            // コミット
             sqlSession.commit();
             
             if (result > 0) {
@@ -286,6 +259,7 @@ public class CommentDao {
     
     /**
      * コメント削除（論理削除）
+     * 
      * @param commentId コメントID
      * @return 成功した場合true
      */
@@ -299,18 +273,8 @@ public class CommentDao {
             sqlSession = MyBatisUtil.getSqlSession();
             CommentMapper mapper = sqlSession.getMapper(CommentMapper.class);
             
-            // 論理削除実行
             int result = mapper.deleteComment(commentId);
-            /*
-             * DELETE文の構造:
-             * UPDATE comment_data SET is_deleted = TRUE
-             * WHERE comment_id = #{commentId}
-             * 
-             * 注意: is_deleted = FALSE 条件なし
-             * → 既に削除済みでも再削除可能
-             */
-            
-            // コミット
+
             sqlSession.commit();
             
             if (result > 0) {
@@ -335,6 +299,7 @@ public class CommentDao {
     
     /**
      * 投稿のコメント数を取得
+     * 
      * @param boardId 投稿ID
      * @return コメント数
      */
@@ -349,13 +314,7 @@ public class CommentDao {
             CommentMapper mapper = sqlSession.getMapper(CommentMapper.class);
             
             int count = mapper.getCommentCount(boardId);
-            /*
-             * COUNT(*)の結果:
-             * - 削除されていないコメントの総数
-             * - 親コメント＋返信コメントすべて含む
-             * - 0以上の整数値
-             */
-            
+
             logger.debug("【コメント数取得】取得成功 - board_id: " + boardId + ", count: " + count);
             
             return count;

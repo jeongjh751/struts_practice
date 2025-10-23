@@ -31,6 +31,14 @@
 <body>
 <h1>掲示板</h1>
 <p><a href="boardInput.action">[新規投稿]</a></p>
+<div style="margin: 10px 0;">
+    <a href="boardImportForm.action">
+        <button type="button">CSV import</button>
+    </a>
+    <a href="boardExportCsv.action">
+        <button type="button">CSV download</button>
+    </a>
+</div>
 <p>
     カテゴリ: 
     <a href="boardList.action">[全て]</a>
@@ -90,7 +98,7 @@
  */
 ValueStack stack = (ValueStack)request.getAttribute(ServletActionContext.STRUTS_VALUESTACK_KEY);
 if(stack!=null && stack.findValue("data")==null){
-    stack.set("data", BoardDao.getChatData());
+    stack.set("data", BoardDao.findAll());
 }
 %>
 

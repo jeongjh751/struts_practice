@@ -2,6 +2,7 @@ package service;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 import java.util.stream.Collectors;
 
 import org.apache.logging.log4j.LogManager;
@@ -12,6 +13,7 @@ import dto.request.BoardCreateRequest;
 import dto.request.BoardUpdateRequest;
 import dto.response.BoardDetailResponse;
 import dto.response.BoardListResponse;
+import dto.response.CsvImportResponse;
 import entity.BoardEntity;
 
 /**
@@ -302,5 +304,114 @@ public class BoardService {
             logger.error("【Service】修正フォーム用照会エラー: " + e.getMessage(), e);
             return null;
         }
+    }
+    
+    /**
+     * 全掲示板データをEntity形式で取得（CSV出力用）
+     * 
+     * @return 掲示板Entityリスト
+     */
+    public List<BoardEntity> getAllBoardEntities() {
+        logger.info("【Service】全データ取得開始（CSV用）");
+        
+        try {
+            List<BoardEntity> entities = BoardDao.findAll();
+            logger.info("【Service】取得完了: " + entities.size() + "件");
+            return entities;
+            
+        } catch (Exception e) {
+            logger.error("【Service】データ取得エラー: " + e.getMessage(), e);
+            return new ArrayList<>();
+        }
+    }
+    
+    /**
+     * CSV形式のデータから掲示板を一括登録
+     * 
+     * @param csvDataList CSVから変換されたMapリスト
+     * @param ipAddress 登録者のIPアドレス
+     * @return インポート結果
+     */
+    public CsvImportResponse importBoardsFromCsvData(
+            List<Map<String, String>> csvDataList, String ipAddress) {
+        
+        logger.info("【Service】掲示板CSV一括登録開始: " + csvDataList.size() + "件");
+        
+        CsvImportResponse result = new CsvImportResponse();
+        
+        int rowNum = 0;
+        for (Map<String, String> rowData : csvDataList) {
+            rowNum++;
+            
+            try {
+                // Map → Request DTO変換
+                BoardCreateRequest request = new BoardCreateRequest(
+                    rowData.get("category"),
+                    rowData.get("title"),
+                    rowData.get("content"),
+                    rowData.get("writer"),
+                    ipAddress
+                );
+                
+                // バリデーション
+                if (!request.isValid()) {
+                    result.addError((rowNum + 1) + "行: 必須項目漏れ");
+                    result.incrementFailCount();
+                    continue;
+                }
+                
+                // 既存のcreateBoardメソッドで登録
+                boolean success = createBoard(request);
+                
+                if (success) {
+                    result.incrementSuccessCount();
+                } else {
+                    result.addError((rowNum + 1) + "行: 登録失敗");
+                    result.incrementFailCount();
+                }
+                
+            } catch (Exception e) {
+                result.addError((rowNum + 1) + "行: " + e.getMessage());
+                result.incrementFailCount();
+                logger.error("【Service】行" + (rowNum + 1) + "処理エラー", e);
+            }
+        }
+        
+        logger.info("【Service】CSV一括登録完了 - 成功: " 
+                   + result.getSuccessCount() + "件");
+        
+        return result;
+    }
+
+    /**
+     * 全掲示板データをCSV出力用配列に変換
+     * 
+     * @return CSV出力用のString配列リスト
+     */
+    public List<String[]> getBoardDataForCsvExport() {
+        logger.info("【Service】CSV出力用データ取得開始");
+        
+        List<String[]> csvData = new ArrayList<>();
+        List<BoardEntity> entities = BoardDao.findAll();
+        
+        java.text.SimpleDateFormat sdf = 
+            new java.text.SimpleDateFormat("yyyy-MM-dd HH:mm:ss");
+        
+        for (BoardEntity entity : entities) {
+            String[] row = {
+                String.valueOf(entity.getBoardId()),
+                entity.getCategory() != null ? entity.getCategory() : "",
+                entity.getTitle() != null ? entity.getTitle() : "",
+                entity.getContent() != null ? entity.getContent() : "",
+                entity.getWriter() != null ? entity.getWriter() : "",
+                String.valueOf(entity.getViewCount()),
+                entity.getCreatedAt() != null ? 
+                    sdf.format(entity.getCreatedAt()) : ""
+            };
+            csvData.add(row);
+        }
+        
+        logger.info("【Service】CSV出力用データ取得完了: " + csvData.size() + "件");
+        return csvData;
     }
 }

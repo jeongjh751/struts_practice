@@ -3,7 +3,11 @@ package action;
 import java.io.File;
 import java.io.FileInputStream;
 import java.io.InputStream;
+import java.util.Arrays;
 import java.util.List;
+import java.util.Map;
+
+import javax.servlet.http.HttpServletResponse;
 
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -16,9 +20,11 @@ import dto.request.BoardCreateRequest;
 import dto.request.BoardUpdateRequest;
 import dto.response.BoardDetailResponse;
 import dto.response.BoardListResponse;
+import dto.response.CsvImportResponse;
 import model.CommentData;
 import model.FileInfo;
 import service.BoardService;
+import service.CsvService;
 import service.FileService;
 
 /**
@@ -29,17 +35,6 @@ import service.FileService;
  * - ユーザーからのリクエストを受け取る
  * - ビジネスロジックを実行（Boardクラスを呼び出す）
  * - 処理結果をビュー（JSP）に渡す
- * 
- * MVCパターンにおける位置づけ:
- * - Model: Board, BoardData（データとビジネスロジック）
- * - View: board.jsp（画面表示）
- * - Controller: BoardAction（このクラス）← リクエストの制御
- * 
- * ActionSupportクラスを継承することで得られる機能:
- * - バリデーション機能（入力チェック）
- * - エラーメッセージの管理
- * - 国際化（i18n）のサポート
- * - 結果の返却（success, error, input等）
  */
 public class BoardAction extends ActionSupport {
 	/*
@@ -51,10 +46,6 @@ public class BoardAction extends ActionSupport {
 	 *   hasActionErrors(): エラーがあるかチェック
 	 *   getText(): プロパティファイルからメッセージ取得
 	 * 
-	 * 【他の選択肢】
-	 * 1. Actionインターフェースを実装（最小限の機能のみ）
-	 * 2. ActionSupportを継承（推奨）← 今回採用
-	 * 3. 何も継承しない（POJOアクション）
 	 */
 
 	// ========== Log4j2宣言 ==========
@@ -83,18 +74,12 @@ public class BoardAction extends ActionSupport {
 	private String content;
 	/*
 	 * 【投稿メッセージを保持するフィールド】
-	 * JSPの <s:textfield name="message"/> と対応
 	 */
 	
 	private String writer;
 	/*
 	 * 【投稿者名を保持するフィールド】
 	 * 
-	 * JSPからのデータバインディング:
-	 * 1. JSPで <s:textfield name="name"/> と書く
-	 * 2. ユーザーが「太郎」と入力してフォーム送信
-	 * 3. Struts2が自動的にsetName("太郎")を呼び出す
-	 * 4. このnameフィールドに「太郎」が設定される
 	 */
 
 	private String updater;
@@ -105,7 +90,6 @@ public class BoardAction extends ActionSupport {
 	private String ipAdress;
 	/*
 	 * 【投稿者のIPアドレスを保持するフィールド】
-	 * JSPの <input type="hidden" name="remoteAddress"/> と対応
 	 */
 	
 	private List<BoardListResponse> data;        // 一覧用
@@ -118,6 +102,18 @@ public class BoardAction extends ActionSupport {
     private File upload; // アップロードされたファイル
     private String uploadContentType; // ファイルのContentタイプ
     private String uploadFileName; // ファイル名
+    
+    // ========== CSV用フィールド追加 ==========
+    private CsvService csvService = new CsvService();  // CSV専用サービス
+    
+    private File csvFile;
+    private String csvFileContentType;
+    private String csvFileFileName;
+    
+    private int successCount = 0;  // 成功件数
+    private int failCount = 0;     // 失敗件数
+    
+    private CsvImportResponse importResult;
     
     private String fileName;
     private InputStream inputStream;
@@ -293,6 +289,42 @@ public class BoardAction extends ActionSupport {
         this.uploadFileName = uploadFileName;
     }
     
+    public File getCsvFile() {
+        return csvFile;
+    }
+    
+    public void setCsvFile(File csvFile) {
+        this.csvFile = csvFile;
+    }
+    
+    public String getCsvFileContentType() {
+        return csvFileContentType;
+    }
+    
+    public void setCsvFileContentType(String csvFileContentType) {
+        this.csvFileContentType = csvFileContentType;
+    }
+    
+    public String getCsvFileFileName() {
+        return csvFileFileName;
+    }
+    
+    public void setCsvFileFileName(String csvFileFileName) {
+        this.csvFileFileName = csvFileFileName;
+    }
+    
+    public int getSuccessCount() {
+        return successCount;
+    }
+    
+    public int getFailCount() {
+        return failCount;
+    }
+    
+    public CsvImportResponse getImportResult() {
+        return importResult;
+    }
+    
     public InputStream getInputStream() {
         return inputStream;
     }
@@ -453,7 +485,6 @@ public class BoardAction extends ActionSupport {
         }
     }
 
-    
     /*
      * 掲示板修正
      * 
@@ -514,7 +545,6 @@ public class BoardAction extends ActionSupport {
         return "list";
 
     }
-
 
     /*
      * 掲示板削除
@@ -608,6 +638,136 @@ public class BoardAction extends ActionSupport {
 		 * 4. execute()メソッドでif(isValid())として判定
 		 */
 	}
+	
+    /**
+     * CSV インポート画面表示
+     */
+    public String importForm() {
+        logger.info("【CSV Import】画面表示");
+        return "importForm";
+    }
+    
+    /**
+     * CSV インポート処理
+     * 
+     * Controller責任:
+     * 1. ファイルバリデーション
+     * 2. IPアドレス取得
+     * 3. Serviceに委任
+     * 4. 結果をJSPに渡す
+     */
+    public String importCsv() {
+        logger.info("【CSV Import】処理開始");
+        
+        try {
+            // 1. ファイルバリデーション
+            if (csvFile == null) {
+                addActionError("ファイルを選んでください。");
+                return "importForm";
+            }
+            
+            if (!csvFileFileName.toLowerCase().endsWith(".csv")) {
+                addActionError("CSVファイルのみアップロードできます。");
+                return "importForm";
+            }
+            
+            logger.info("【CSV Import】ファイル受信: " + csvFileFileName);
+            
+            // 2. CSVヘッダー検証（CsvServiceに委任）
+            List<String> requiredHeaders = Arrays.asList(
+                "category", "title", "content", "writer"
+            );
+            
+            boolean isValidHeader = ((CsvService) csvService).validateCsvHeaders(
+                csvFile, requiredHeaders);
+            
+            if (!isValidHeader) {
+                addActionError("CSV ヘッダーが正しくありません。" +
+                             "必須項目: category, title, content, writer");
+                return "importForm";
+            }
+            
+            // 3. CSV解析（CsvServiceに委任）
+            List<Map<String, String>> csvData = 
+                csvService.parseCsvToMapList(csvFile);
+            
+            if (csvData.isEmpty()) {
+                addActionError("CSVファイルにデータがありません。");
+                return "importForm";
+            }
+            
+            // 4. IPアドレス取得
+            String clientIp = ServletActionContext.getRequest().getRemoteAddr();
+            logger.debug("【CSV Import】IPアドレス: " + clientIp);
+            
+            // 5. データ登録（BoardServiceに委任）
+            importResult = boardService.importBoardsFromCsvData(csvData, clientIp);
+            
+            // 6. 結果メッセージ設定
+            if (importResult.getSuccessCount() > 0) {
+                addActionMessage(importResult.getSuccessCount() + "件 登録完了");
+            }
+            
+            if (importResult.hasErrors()) {
+                for (String error : importResult.getErrorMessages()) {
+                    addActionError(error);
+                }
+            }
+            
+            logger.info("【CSV Import】処理完了");
+            return "importResult";
+            
+        } catch (Exception e) {
+            logger.error("【CSV Import】エラー: " + e.getMessage(), e);
+            addActionError("CSV Import エラー: " + e.getMessage());
+            return "importForm";
+        }
+    }
+
+    /**
+     * CSV エクスポート処理
+     * 
+     * Controller責任:
+     * 1. レスポンス設定
+     * 2. Serviceからデータ取得
+     * 3. ServiceにCSV出力依頼
+     */
+    public String exportCsv() {
+        logger.info("【CSV Export】処理開始");
+        
+        try {
+            // 1. データ取得（BoardServiceに委任）
+            List<String[]> csvData = boardService.getBoardDataForCsvExport();
+            
+            if (csvData.isEmpty()) {
+                addActionError("出力データがありません。");
+                return "list";
+            }
+            
+            // 2. レスポンス設定
+            HttpServletResponse response = ServletActionContext.getResponse();
+            response.setContentType("text/csv; charset=UTF-8");
+            
+            String fileName = csvService.generateFileName("board_data");
+            response.setHeader("Content-Disposition", 
+                "attachment; filename=\"" + fileName + "\"");
+            
+            // 3. CSV出力（CsvServiceに委任）
+            String[] headers = {"id", "category", "title", "content", 
+                               "writer", "view_count", "created_at"};
+            
+            csvService.exportToCsv(response.getOutputStream(), headers, csvData);
+            
+            logger.info("【CSV Export】完了 - " + csvData.size() + "件");
+            return NONE;
+            
+        } catch (Exception e) {
+            logger.error("【CSV Export】エラー: " + e.getMessage(), e);
+            addActionError("CSV Export エラー");
+            return "list";
+        }
+
+    }
 	
 	/*
      * ファイルダウンロード
